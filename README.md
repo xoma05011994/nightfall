@@ -1,6 +1,6 @@
 # Nightfall (survivor-2d)
 
-2D top-down survival roguelite — v0.4. Single-player, no backend.
+2D top-down survival roguelite — v0.5. Single-player, no backend.
 
 ## Dev workflow
 
@@ -26,40 +26,56 @@ npm run build         # typecheck + production build
   Slots 2 and 3 come from enemy drops — walking onto a dropped weapon
   auto-equips it into an empty slot, or prompts you to replace slot 2/3 (or
   leave it) if both are full. Switch slots with 1/2/3, reload the equipped
-  weapon early with R.
+  weapon early with R. Walking onto a **duplicate** of a weapon you already
+  hold levels that weapon up instead (1-10, shown on its HUD slot) — level 10
+  is MAX and grants a one-time "GIGA" bonus (extra pierce, faster cooldown,
+  a bigger glowing shot). World pickups and HUD slots show a distinct icon
+  per weapon rather than a generic diamond.
 - Enemies spawn on a ring around the player at a rate that ramps up over
-  time; their stats scale gently with elapsed run time. Any kill has a small
-  chance to drop one of the 5 pickup weapons.
+  time, drawn from a weighted mix that escalates roughly once a minute:
+  **Grunt** (baseline) alone at first, then **Brute** (tanky, slow, hits
+  hard) joins, then **Shooter** (fragile, keeps its distance, lobs a slow
+  dodgeable projectile) once the mix already has some bulk to screen for it.
+  Stats also scale gently with elapsed run time on top of the type mix. Any
+  kill has a small chance to drop one of the 5 pickup weapons.
 - Kills also drop XP orbs that fly toward the player once in pickup range.
   Leveling up offers a choice of 3 perks (each with its own icon) from a pool
-  of 15: the original 5 (damage/fire-rate/max-hp/move-speed/extra-projectile),
+  of 16: the original 5 (damage/fire-rate/max-hp/move-speed/extra-projectile),
   4 from v0.3 — **Pierce** (projectiles punch through an extra enemy),
   **Ignite** (hits apply a burn damage-over-time), **Chain Lightning** (hits
   arc bonus damage to the nearest other enemy, rendered as a jagged bolt),
   **Deadly Aura** (continuous radius damage around the player, independent of
-  the equipped weapon) — and 6 new synergy-driven perks: **Vampiric**
-  (life steal on any damage source), **Berserker** (damage rises as your HP
-  drops), **Momentum** (killing stacks a temporary fire-rate boost),
-  **Wildfire** (Aura hits also apply Ignite — inert without Aura),
-  **Overload** (Aura hits can arc a bonus Lightning bolt to a nearby enemy —
-  inert without both Aura and Lightning), **Greed** (bigger pickup radius +
-  more gold from chests). Perks picked this run are listed in a tray on the
-  left side of the HUD.
+  the equipped weapon) — and 7 synergy-driven perks forming a small
+  dependency tree: **Vampiric** (life steal on any damage source),
+  **Berserker** (damage rises as your HP drops), **Momentum** (killing
+  stacks a temporary fire-rate boost), **Greed** (bigger pickup radius + more
+  gold from chests), **Wildfire** (Aura hits also apply Ignite — can't be
+  offered until you have Ignite), **Overload** (Aura hits can arc a bonus
+  Lightning bolt — can't be offered until you have Chain Lightning), and
+  **Storm Conduit** (a capstone that boosts Chain Lightning further — can't
+  be offered until you have both Ignite and Chain Lightning). Every perk is
+  capped at 5 ranks and drops out of the offer pool once maxed. Perks picked
+  this run are listed in a tray on the left side of the HUD.
 - Chests spawn periodically (a different rhythm from weapon drops, which are
   kill-triggered) — walking onto one grants gold, a chunk of XP, a perk
-  choice, or a **Magnet** burst that instantly collects every XP orb
-  currently on the map, chosen at random (4-way even odds).
+  choice, or a **Magnet** burst that visually pulls every XP orb on the map
+  toward you at high speed, chosen at random (4-way even odds). Whatever you
+  get floats up as an icon above your character.
 - Two game modes, picked from the main menu:
   - **Endless** — the original open-ended survive-as-long-as-you-can loop.
-  - **Adventure** — pick 1 of 10 pre-generated levels (each a fixed RNG seed,
-    so a level plays out identically on repeat attempts, plus its own dark
-    color palette). Survive 6 minutes to win; a boss enemy arrives at the
-    3:00 and 6:00 marks. Completing a level's gold banks into a persistent
-    profile (`localStorage`); Endless gold is a per-run stat only, never
-    saved.
+  - **Adventure** — pick 1 of 10 pre-generated levels, each a fixed RNG seed
+    (so a level plays out identically on repeat attempts) with its own dark
+    color palette. **Only the first level is unlocked by default** — winning
+    a level unlocks the next one in sequence, persisted to the profile.
+    Bosses arrive at 3:00 and 6:00; the run keeps going past 6:00 (timer,
+    spawns, everything) until you actually kill the second boss — surviving
+    to the clock mark alone is no longer enough. Completing a level's gold
+    banks into a persistent profile (`localStorage`); Endless gold is a
+    per-run stat only, never saved.
   - The Armory (from the main menu) spends banked gold on permanent
     per-weapon damage upgrades (+10%/level, up to 5 levels) — these only
-    apply in Adventure mode, never Endless.
+    apply in Adventure mode, never Endless, and stack multiplicatively with
+    in-run weapon leveling.
 - The play area is bounded by a perimeter fence — no infinite wandering.
   Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
   rendering, camera follows the player without ever rotating.
@@ -91,7 +107,7 @@ npm run build         # typecheck + production build
   orchestration logic (weapon pickups, chests, adventure timing, weapon
   upgrades, level seeding).
 
-## Known gaps (accepted for v0.4)
+## Known gaps (accepted for v0.5)
 
 - No sound.
 - Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade

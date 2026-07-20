@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveEnemyContactDamage, resolveProjectileHits, stepEnemies, stepProjectiles } from "../src/systems/combat";
+import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "../src/systems/combat";
 import { collectDeadEnemies } from "../src/systems/enemies";
 import type { Projectile } from "../src/types";
 import { makeEnemy, makePlayer } from "./testHelpers";
@@ -166,6 +166,58 @@ describe("stepEnemies", () => {
     const enemy = makeEnemy({ contactTimerMs: 300 });
     stepEnemies([enemy], { x: 1000, y: 1000 }, 0.1);
     expect(enemy.contactTimerMs).toBeCloseTo(200, 5);
+  });
+
+  it("a shooter advances toward the player when farther than its preferred range", () => {
+    const shooter = makeEnemy({ type: "shooter", position: { x: 1000, y: 0 }, speed: 50, preferredRange: 260, shootCooldownMs: 2000, shootTimerMs: 2000 });
+    stepEnemies([shooter], { x: 0, y: 0 }, 1);
+    expect(shooter.position.x).toBeLessThan(1000);
+  });
+
+  it("a shooter backs away from the player when closer than its preferred range", () => {
+    const shooter = makeEnemy({ type: "shooter", position: { x: 50, y: 0 }, speed: 50, preferredRange: 260, shootCooldownMs: 2000, shootTimerMs: 2000 });
+    stepEnemies([shooter], { x: 0, y: 0 }, 1);
+    expect(shooter.position.x).toBeGreaterThan(50);
+  });
+
+  it("a shooter fires a slow projectile at the player once its shoot timer elapses", () => {
+    const shooter = makeEnemy({ type: "shooter", position: { x: 260, y: 0 }, speed: 0, preferredRange: 260, shootCooldownMs: 2000, shootTimerMs: 0 });
+    const enemyProjectiles: Projectile[] = [];
+    const nextId = stepEnemies([shooter], { x: 0, y: 0 }, 0.016, enemyProjectiles, 1);
+    expect(enemyProjectiles).toHaveLength(1);
+    expect(enemyProjectiles[0]!.velocity.x).toBeLessThan(0); // aimed back toward the player
+    expect(shooter.shootTimerMs).toBeCloseTo(2000, 5); // reset to its cooldown
+    expect(nextId).toBe(2);
+  });
+
+  it("a grunt/brute never spawns projectiles regardless of shootTimerMs", () => {
+    const grunt = makeEnemy({ type: "grunt", position: { x: 100, y: 0 } });
+    const enemyProjectiles: Projectile[] = [];
+    stepEnemies([grunt], { x: 0, y: 0 }, 1, enemyProjectiles, 1);
+    expect(enemyProjectiles).toHaveLength(0);
+  });
+});
+
+describe("stepEnemyProjectiles / resolveEnemyProjectileHits", () => {
+  it("moves enemy projectiles and expires them past their ttl, same as player projectiles", () => {
+    const projectiles: Projectile[] = [{ id: 1, position: { x: 0, y: 0 }, velocity: { x: 100, y: 0 }, damage: 10, radius: 5, ttlMs: 50, color: "#b23fff" }];
+    expect(stepEnemyProjectiles(projectiles, 0.1)).toHaveLength(0);
+  });
+
+  it("damages the player on overlap and removes the projectile", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, hp: 100 });
+    const projectiles: Projectile[] = [{ id: 1, position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, damage: 10, radius: 5, ttlMs: 1000, color: "#b23fff" }];
+    const surviving = resolveEnemyProjectileHits(projectiles, player);
+    expect(surviving).toHaveLength(0);
+    expect(player.hp).toBe(90);
+  });
+
+  it("leaves non-overlapping projectiles alone", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, hp: 100 });
+    const projectiles: Projectile[] = [{ id: 1, position: { x: 1000, y: 0 }, velocity: { x: 0, y: 0 }, damage: 10, radius: 5, ttlMs: 1000, color: "#b23fff" }];
+    const surviving = resolveEnemyProjectileHits(projectiles, player);
+    expect(surviving).toHaveLength(1);
+    expect(player.hp).toBe(100);
   });
 });
 

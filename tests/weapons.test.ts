@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { WEAPON_DEFS, canFire, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "../src/systems/weapons";
-import type { BeamEffect, ConeEffect, Enemy, LightningEffect, Projectile } from "../src/types";
+import { WEAPON_MAX_LEVEL } from "../src/constants";
+import { WEAPON_DEFS, canFire, createWeaponInstance, fireWeapon, isWeaponMaxLevel, startReload, stepWeaponInstance, weaponLevelDamageMultiplier } from "../src/systems/weapons";
+import type { BeamEffect, ConeEffect, Enemy, LightningEffect, Projectile, WeaponId } from "../src/types";
 import { makeEnemy, makePlayer } from "./testHelpers";
 
 function makeCtx(enemies: Enemy[] = []) {
@@ -19,6 +20,31 @@ describe("createWeaponInstance", () => {
     const instance = createWeaponInstance("pistol");
     expect(instance.ammo).toBe(WEAPON_DEFS.pistol.magazineSize);
     expect(instance.reloading).toBe(false);
+  });
+
+  it("defaults to level 1", () => {
+    expect(createWeaponInstance("pistol").level).toBe(1);
+  });
+});
+
+describe("WEAPON_DEFS", () => {
+  it("every weapon has a non-empty icon", () => {
+    for (const id of Object.keys(WEAPON_DEFS) as WeaponId[]) {
+      expect(WEAPON_DEFS[id].icon.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("weaponLevelDamageMultiplier / isWeaponMaxLevel", () => {
+  it("is 1 at level 1 and increases per level", () => {
+    expect(weaponLevelDamageMultiplier(1)).toBe(1);
+    expect(weaponLevelDamageMultiplier(2)).toBeGreaterThan(1);
+    expect(weaponLevelDamageMultiplier(WEAPON_MAX_LEVEL)).toBeGreaterThan(weaponLevelDamageMultiplier(2));
+  });
+
+  it("isWeaponMaxLevel is only true at WEAPON_MAX_LEVEL and above", () => {
+    expect(isWeaponMaxLevel(WEAPON_MAX_LEVEL - 1)).toBe(false);
+    expect(isWeaponMaxLevel(WEAPON_MAX_LEVEL)).toBe(true);
   });
 });
 
@@ -200,5 +226,28 @@ describe("fireWeapon — flamethrower (cone mode)", () => {
     expect(inCone.hp).toBe(100 - WEAPON_DEFS.flamethrower.damage);
     expect(behindPlayer.hp).toBe(100);
     expect(ctx.coneEffects).toHaveLength(1);
+  });
+});
+
+describe("fireWeapon — in-run weapon leveling", () => {
+  it("scales projectile damage up with the weapon's own level, independent of player.damageMultiplier", () => {
+    const instance = createWeaponInstance("pistol", 5);
+    const ctx = makeCtx();
+    fireWeapon(instance, WEAPON_DEFS.pistol, makePlayer(), { x: 1, y: 0 }, ctx, 0);
+    expect(ctx.projectiles[0]!.damage).toBeCloseTo(WEAPON_DEFS.pistol.damage * weaponLevelDamageMultiplier(5), 5);
+  });
+
+  it("a max-level (GIGA) weapon tags its projectile and grants bonus pierce/cooldown", () => {
+    const maxed = createWeaponInstance("pistol", WEAPON_MAX_LEVEL);
+    const ctxMaxed = makeCtx();
+    fireWeapon(maxed, WEAPON_DEFS.pistol, makePlayer(), { x: 1, y: 0 }, ctxMaxed, 0);
+    expect(ctxMaxed.projectiles[0]!.giga).toBe(true);
+    expect(ctxMaxed.projectiles[0]!.pierceRemaining).toBeGreaterThan(0);
+    expect(maxed.fireTimerMs).toBeLessThan(WEAPON_DEFS.pistol.fireCooldownMs);
+
+    const notMaxed = createWeaponInstance("pistol", WEAPON_MAX_LEVEL - 1);
+    const ctxNotMaxed = makeCtx();
+    fireWeapon(notMaxed, WEAPON_DEFS.pistol, makePlayer(), { x: 1, y: 0 }, ctxNotMaxed, 0);
+    expect(ctxNotMaxed.projectiles[0]!.giga).toBe(false);
   });
 });

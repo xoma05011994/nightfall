@@ -1,4 +1,4 @@
-import { PROJECTILE_RADIUS, PROJECTILE_TTL_MS } from "../constants";
+import { PROJECTILE_RADIUS, PROJECTILE_TTL_MS, WEAPON_GIGA_COOLDOWN_MULT, WEAPON_GIGA_EXTRA_PIERCE, WEAPON_GIGA_PROJECTILE_SCALE, WEAPON_LEVEL_DAMAGE_PER_LEVEL, WEAPON_MAX_LEVEL } from "../constants";
 import { dot, normalize, pointToRaySegmentDistance, rotate } from "../math";
 import type { BeamEffect, ConeEffect, Enemy, LightningEffect, Player, Projectile, Vec2, WeaponDef, WeaponId, WeaponInstance } from "../types";
 import { applyLifeSteal, applyOnHitEffects } from "./statusEffects";
@@ -17,6 +17,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     projectileSpeed: 700,
     color: "#ffb347",
     pickupLocked: true,
+    icon: '<rect x="9" y="3" width="4" height="10" rx="1" fill="currentColor"/><path d="M9 13 L5 13 L5 20 L9 20 Z" fill="currentColor"/><rect x="7" y="14" width="6" height="2" fill="currentColor" opacity="0.6"/>',
   },
   shotgun: {
     id: "shotgun",
@@ -30,6 +31,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     pelletCount: 6,
     spreadRad: 0.5,
     color: "#ff8c42",
+    icon: '<rect x="2" y="10" width="18" height="4" rx="1" fill="currentColor"/><rect x="17" y="6" width="5" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="4" y="14" width="6" height="4" fill="currentColor" opacity="0.6"/>',
   },
   assaultRifle: {
     id: "assaultRifle",
@@ -41,6 +43,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     reloadMs: 1800,
     projectileSpeed: 780,
     color: "#ffd23f",
+    icon: '<rect x="2" y="10" width="20" height="3" rx="1" fill="currentColor"/><rect x="9" y="13" width="3" height="7" fill="currentColor" opacity="0.8"/><rect x="4" y="7" width="6" height="3" fill="currentColor" opacity="0.6"/>',
   },
   rpg: {
     id: "rpg",
@@ -54,6 +57,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     splashRadius: 90,
     splashDamage: 40,
     color: "#ff3b3b",
+    icon: '<rect x="3" y="10" width="12" height="5" rx="1" fill="currentColor"/><polygon points="15,8 22,12 15,16" fill="currentColor"/><rect x="6" y="15" width="3" height="6" fill="currentColor" opacity="0.6"/>',
   },
   laserCannon: {
     id: "laserCannon",
@@ -65,6 +69,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     reloadMs: 2400,
     beamRange: 500,
     color: "#4ee2ff",
+    icon: '<polygon points="2,15 20,9 20,15 2,20" fill="currentColor"/><circle cx="16" cy="12.5" r="3" fill="currentColor" opacity="0.6"/>',
   },
   flamethrower: {
     id: "flamethrower",
@@ -77,14 +82,26 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     coneRange: 180,
     coneAngleRad: 0.9,
     color: "#ff6a00",
+    icon: '<circle cx="7" cy="14" r="5" fill="currentColor" opacity="0.7"/><rect x="10" y="11" width="8" height="4" rx="1" fill="currentColor"/><polygon points="18,10 23,12.5 18,15" fill="currentColor" opacity="0.8"/>',
   },
 };
 
+// In-run weapon leveling (picking up a duplicate weapon) — separate from the
+// meta-progression shop's per-run-independent upgrades, which stack
+// multiplicatively on top of this.
+export function weaponLevelDamageMultiplier(level: number): number {
+  return 1 + Math.max(0, level - 1) * WEAPON_LEVEL_DAMAGE_PER_LEVEL;
+}
+
+export function isWeaponMaxLevel(level: number): boolean {
+  return level >= WEAPON_MAX_LEVEL;
+}
+
 export const DROPPABLE_WEAPON_IDS: WeaponId[] = ["shotgun", "assaultRifle", "rpg", "laserCannon", "flamethrower"];
 
-export function createWeaponInstance(weaponId: WeaponId): WeaponInstance {
+export function createWeaponInstance(weaponId: WeaponId, level = 1): WeaponInstance {
   const def = WEAPON_DEFS[weaponId];
-  return { weaponId, ammo: def.magazineSize, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
+  return { weaponId, ammo: def.magazineSize, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level };
 }
 
 export function stepWeaponInstance(instance: WeaponInstance, def: WeaponDef, dt: number): void {
@@ -109,16 +126,17 @@ export function startReload(instance: WeaponInstance, def: WeaponDef): void {
   instance.reloadTimerMs = def.reloadMs;
 }
 
-function makeProjectile(id: number, origin: Vec2, dir: Vec2, damage: number, def: WeaponDef): Projectile {
+function makeProjectile(id: number, origin: Vec2, dir: Vec2, damage: number, def: WeaponDef, giga: boolean): Projectile {
   const speed = def.projectileSpeed ?? 600;
   return {
     id,
     position: { x: origin.x, y: origin.y },
     velocity: { x: dir.x * speed, y: dir.y * speed },
     damage,
-    radius: PROJECTILE_RADIUS,
+    radius: giga ? PROJECTILE_RADIUS * WEAPON_GIGA_PROJECTILE_SCALE : PROJECTILE_RADIUS,
     ttlMs: PROJECTILE_TTL_MS,
     color: def.color,
+    giga,
   };
 }
 
@@ -140,10 +158,12 @@ const BEAM_HIT_WIDTH = 10;
 export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Player, aimDir: Vec2, ctx: FireContext, nowMs: number): number {
   if (!canFire(instance)) return ctx.nextProjectileId;
 
-  instance.fireTimerMs = def.fireCooldownMs * player.attackCooldownMultiplier;
+  const giga = isWeaponMaxLevel(instance.level);
+  instance.fireTimerMs = def.fireCooldownMs * player.attackCooldownMultiplier * (giga ? WEAPON_GIGA_COOLDOWN_MULT : 1);
   instance.ammo -= 1;
 
-  const damage = def.damage * player.damageMultiplier;
+  const damage = def.damage * player.damageMultiplier * weaponLevelDamageMultiplier(instance.level);
+  const pierce = player.pierce + (giga ? WEAPON_GIGA_EXTRA_PIERCE : 0);
   let nextId = ctx.nextProjectileId;
   const dir = normalize(aimDir);
 
@@ -152,8 +172,8 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
       const count = 1 + player.extraProjectiles;
       for (let i = 0; i < count; i++) {
         const offset = (i - (count - 1) / 2) * 0.12;
-        const projectile = makeProjectile(nextId++, player.position, rotate(dir, offset), damage, def);
-        if (player.pierce > 0) projectile.pierceRemaining = player.pierce;
+        const projectile = makeProjectile(nextId++, player.position, rotate(dir, offset), damage, def, giga);
+        if (pierce > 0) projectile.pierceRemaining = pierce;
         ctx.projectiles.push(projectile);
       }
       break;
@@ -163,16 +183,16 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
       const spread = def.spreadRad ?? 0.4;
       for (let i = 0; i < pellets; i++) {
         const t = pellets === 1 ? 0 : i / (pellets - 1) - 0.5;
-        const projectile = makeProjectile(nextId++, player.position, rotate(dir, t * spread), damage, def);
-        if (player.pierce > 0) projectile.pierceRemaining = player.pierce;
+        const projectile = makeProjectile(nextId++, player.position, rotate(dir, t * spread), damage, def, giga);
+        if (pierce > 0) projectile.pierceRemaining = pierce;
         ctx.projectiles.push(projectile);
       }
       break;
     }
     case "explosive": {
-      const projectile = makeProjectile(nextId++, player.position, dir, damage, def);
+      const projectile = makeProjectile(nextId++, player.position, dir, damage, def, giga);
       projectile.splashRadius = def.splashRadius;
-      projectile.splashDamage = (def.splashDamage ?? 0) * player.damageMultiplier;
+      projectile.splashDamage = (def.splashDamage ?? 0) * player.damageMultiplier * weaponLevelDamageMultiplier(instance.level);
       ctx.projectiles.push(projectile);
       break;
     }

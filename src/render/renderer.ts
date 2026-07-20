@@ -1,6 +1,7 @@
-import { FENCE_POST_SPACING, WORLD_HALF_SIZE } from "../constants";
+import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "../constants";
+import { drawWeaponIcon } from "./weaponIcons";
 import { WEAPON_DEFS } from "../systems/weapons";
-import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, Vec2, WeaponPickup, XpOrb } from "../types";
+import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "../types";
 
 const DEFAULT_PALETTE: LevelPalette = { bg: "#1c1310", splatterRGB: "139, 0, 0", fence: "#3a2416" };
 
@@ -14,12 +15,14 @@ export interface RenderState {
   player: Player;
   enemies: Enemy[];
   projectiles: Projectile[];
+  enemyProjectiles: Projectile[];
   xpOrbs: XpOrb[];
   weaponPickups: WeaponPickup[];
   chests: Chest[];
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
   lightningEffects: LightningEffect[];
+  rewardPopups: RewardPopupEffect[];
 }
 
 const SPLATTER_FIELD_HALF_SIZE = 4000;
@@ -109,8 +112,10 @@ export class Renderer {
     this.drawBeamEffects(state.beamEffects, nowMs);
     this.drawLightningEffects(state.lightningEffects, nowMs);
     this.drawProjectiles(state.projectiles);
+    this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, nowMs);
+    this.drawRewardPopups(state.rewardPopups, nowMs);
 
     ctx.restore();
 
@@ -192,8 +197,10 @@ export class Renderer {
     const ctx = this.ctx;
     for (const enemy of enemies) {
       ctx.save();
-      const spikes = enemy.isBoss ? 12 : 8;
-      ctx.fillStyle = enemy.isBoss ? "#150a1c" : "#1c0d0d";
+      const spikes = enemy.isBoss ? 12 : enemy.type === "brute" ? 7 : 8;
+      const fillStyle = enemy.isBoss ? "#150a1c" : enemy.type === "brute" ? "#241209" : enemy.type === "shooter" ? "#140a1c" : "#1c0d0d";
+      const strokeStyle = enemy.isBoss ? "#7a1fa0" : enemy.type === "brute" ? "#7a3414" : enemy.type === "shooter" ? "#4ee2ff" : "#5c1414";
+      ctx.fillStyle = fillStyle;
       ctx.beginPath();
       for (let i = 0; i < spikes; i++) {
         const angle = (i / spikes) * Math.PI * 2;
@@ -205,11 +212,14 @@ export class Renderer {
       }
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = enemy.isBoss ? "#7a1fa0" : "#5c1414";
-      ctx.lineWidth = enemy.isBoss ? 3 : 1.5;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = enemy.isBoss ? 3 : enemy.type === "brute" ? 2.5 : 1.5;
       if (enemy.isBoss) {
         ctx.shadowColor = "#a020f0";
         ctx.shadowBlur = 16;
+      } else if (enemy.type === "shooter") {
+        ctx.shadowColor = "#4ee2ff";
+        ctx.shadowBlur = 10;
       }
       ctx.stroke();
       ctx.shadowBlur = 0;
@@ -219,6 +229,14 @@ export class Renderer {
         ctx.fillStyle = `rgba(255, 106, 0, ${flicker})`;
         ctx.beginPath();
         ctx.arc(enemy.position.x, enemy.position.y, enemy.radius * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (enemy.type === "shooter") {
+        // A glowing core hints at the ranged threat before it ever fires.
+        ctx.fillStyle = "#4ee2ff";
+        ctx.beginPath();
+        ctx.arc(enemy.position.x, enemy.position.y, enemy.radius * 0.35, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -273,12 +291,17 @@ export class Renderer {
     ctx.save();
     for (const p of projectiles) {
       const radius = p.splashRadius ? p.radius * 1.8 : p.radius;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 10;
+      ctx.shadowColor = p.giga ? "#ffcf4a" : p.color;
+      ctx.shadowBlur = p.giga ? 18 : 10;
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(p.position.x, p.position.y, radius, 0, Math.PI * 2);
       ctx.fill();
+      if (p.giga) {
+        ctx.strokeStyle = "#ffcf4a";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -388,13 +411,70 @@ export class Renderer {
       const def = WEAPON_DEFS[pickup.weaponId];
       ctx.save();
       ctx.translate(pickup.position.x, pickup.position.y);
-      ctx.rotate(Math.PI / 4);
       ctx.shadowColor = def.color;
       ctx.shadowBlur = 14;
-      ctx.fillStyle = def.color;
-      const r = pickup.radius * pulse;
-      ctx.fillRect(-r, -r, r * 2, r * 2);
+      drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse, def.color);
       ctx.restore();
+    }
+  }
+
+  private drawRewardPopups(popups: RewardPopupEffect[], nowMs: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = "bold 13px Georgia";
+    ctx.textAlign = "center";
+    for (const popup of popups) {
+      const life = (popup.expiresAtMs - nowMs) / REWARD_POPUP_LIFETIME_MS;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
+      const risen = (1 - life) * REWARD_POPUP_RISE_PX;
+      const x = popup.position.x;
+      const y = popup.position.y - 30 - risen;
+
+      ctx.globalAlpha = alpha;
+      const color = popup.kind === "gold" ? "#ffcf4a" : popup.kind === "xp" ? "#8fd35f" : popup.kind === "magnet" ? "#ff5a5a" : "#c81e1e";
+      ctx.save();
+      ctx.translate(x, y - 14);
+      this.drawRewardIcon(popup.kind, color);
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 6;
+      ctx.fillText(popup.text, x, y);
+    }
+    ctx.restore();
+  }
+
+  private drawRewardIcon(kind: RewardPopupEffect["kind"], color: string): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    if (kind === "gold") {
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === "xp") {
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === "magnet") {
+      // Horseshoe magnet silhouette.
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, Math.PI * 0.15, Math.PI * 0.85, false);
+      ctx.stroke();
+      ctx.fillRect(-8, -1, 3, 6);
+      ctx.fillRect(5, -1, 3, 6);
+    } else {
+      // Perk — small gift-box diamond.
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(7, 0);
+      ctx.lineTo(0, 7);
+      ctx.lineTo(-7, 0);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 

@@ -1,4 +1,4 @@
-import { PERK_OFFER_COUNT } from "../constants";
+import { PERK_MAX_RANK, PERK_OFFER_COUNT } from "../constants";
 import type { Perk } from "../types";
 
 // Perk design follows the genre's usual pattern (Vampire Survivors,
@@ -22,6 +22,15 @@ import type { Perk } from "../types";
 //     sit in Berserker's low-hp damage window.
 //   - Momentum rewards builds that kill in bursts (Pierce/Aura/Chain
 //     Lightning all hit multiple enemies per action).
+//
+// v0.5 — perks form an explicit dependency tree rather than an implicit one:
+// Wildfire/Overload now declare `requires` so they can't even be OFFERED
+// without their prerequisite already picked (previously they could be
+// offered and just sit inert), and a new capstone, Storm Conduit, requires
+// BOTH Ignite and Lightning — rewarding that combo with a second, deeper
+// perk instead of just the passive double-damage-on-burning-target proc.
+// Every perk is also capped at PERK_MAX_RANK (5) picks and drops out of the
+// offer pool once maxed, so no single perk can be stacked forever.
 export const PERKS: Perk[] = [
   {
     id: "damage",
@@ -138,8 +147,9 @@ export const PERKS: Perk[] = [
   {
     id: "wildfire",
     name: "Wildfire",
-    description: "Deadly Aura also ignites — needs Ignite to deal damage",
+    description: "Deadly Aura also ignites — requires Ignite",
     icon: '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><polygon points="12,7 14.5,12 17,14 14.5,19 9.5,19 7,14 9.5,12" fill="currentColor"/>',
+    requires: ["ignite"],
     apply: (p) => {
       p.auraAppliesIgnite = true;
     },
@@ -147,8 +157,9 @@ export const PERKS: Perk[] = [
   {
     id: "overload",
     name: "Overload",
-    description: "Deadly Aura also arcs lightning — needs Chain Lightning to deal damage",
+    description: "Deadly Aura also arcs lightning — requires Chain Lightning",
     icon: '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><polygon points="13,5 7,13 11,13 10,19 17,11 13,11" fill="currentColor"/>',
+    requires: ["lightning"],
     apply: (p) => {
       p.auraTriggersLightning = true;
     },
@@ -163,15 +174,36 @@ export const PERKS: Perk[] = [
       p.goldMultiplier += 0.2;
     },
   },
+  {
+    id: "stormConduit",
+    name: "Storm Conduit",
+    description: "Chain Lightning hits harder and arcs further — requires Ignite and Chain Lightning",
+    icon: '<polygon points="13,2 4,14 11,14 9,22 20,10 13,10" fill="currentColor"/><polygon points="12,2 16,10 20,14 16,22 8,22 4,14 8,10" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.5"/>',
+    requires: ["ignite", "lightning"],
+    apply: (p) => {
+      p.lightningChainDamage += 14;
+      p.lightningChainRadius += 60;
+    },
+  },
 ];
 
 export function getPerkById(id: string): Perk | undefined {
   return PERKS.find((p) => p.id === id);
 }
 
-// Samples PERK_OFFER_COUNT distinct perks without replacement.
-export function rollPerkOffers(rng: () => number, count: number = PERK_OFFER_COUNT): Perk[] {
-  const pool = [...PERKS];
+// Samples PERK_OFFER_COUNT distinct perks without replacement, excluding any
+// perk whose prerequisites (`requires`) aren't fully met yet, or that's
+// already been picked PERK_MAX_RANK times.
+export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: number }[] = [], count: number = PERK_OFFER_COUNT): Perk[] {
+  const pickedIds = new Set(picked.map((p) => p.perk.id));
+  const rankById = new Map(picked.map((p) => [p.perk.id, p.count]));
+
+  const pool = PERKS.filter((perk) => {
+    if ((rankById.get(perk.id) ?? 0) >= PERK_MAX_RANK) return false;
+    if (perk.requires && !perk.requires.every((id) => pickedIds.has(id))) return false;
+    return true;
+  });
+
   const result: Perk[] = [];
   for (let i = 0; i < count && pool.length > 0; i++) {
     const index = Math.floor(rng() * pool.length);

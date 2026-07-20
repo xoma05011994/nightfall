@@ -1,5 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_WEAPON_UPGRADE_LEVEL, getWeaponUpgradeLevel, loadProfile, purchaseWeaponUpgrade, saveProfile, upgradeCost, weaponDamageMultiplier } from "../src/systems/profile";
+import { LEVELS } from "../src/systems/levels";
+import {
+  MAX_WEAPON_UPGRADE_LEVEL,
+  getWeaponUpgradeLevel,
+  isLevelUnlocked,
+  loadProfile,
+  purchaseWeaponUpgrade,
+  saveProfile,
+  unlockNextLevel,
+  upgradeCost,
+  weaponDamageMultiplier,
+} from "../src/systems/profile";
 
 // The test environment is Node (no DOM), so localStorage doesn't exist —
 // stub a minimal in-memory implementation rather than pulling in jsdom.
@@ -24,17 +35,19 @@ afterEach(() => {
 });
 
 describe("loadProfile", () => {
-  it("returns a default (empty) profile when nothing is stored", () => {
+  it("returns a default profile (only the first level unlocked) when nothing is stored", () => {
     const profile = loadProfile();
     expect(profile.coins).toBe(0);
     expect(profile.weaponUpgrades).toEqual({});
+    expect(profile.unlockedLevelIds).toEqual([LEVELS[0]!.id]);
   });
 
   it("round-trips through saveProfile", () => {
-    saveProfile({ coins: 120, weaponUpgrades: { pistol: 2 } });
+    saveProfile({ coins: 120, weaponUpgrades: { pistol: 2 }, unlockedLevelIds: [LEVELS[0]!.id, LEVELS[1]!.id] });
     const profile = loadProfile();
     expect(profile.coins).toBe(120);
     expect(profile.weaponUpgrades.pistol).toBe(2);
+    expect(profile.unlockedLevelIds).toEqual([LEVELS[0]!.id, LEVELS[1]!.id]);
   });
 
   it("falls back to a default profile on corrupt stored JSON", () => {
@@ -47,11 +60,44 @@ describe("loadProfile", () => {
     localStorage.setItem("nightfall-profile-v1", JSON.stringify({ coins: -5, weaponUpgrades: {} }));
     expect(loadProfile().coins).toBe(0);
   });
+
+  it("always includes the first level, even from a corrupted save missing it", () => {
+    localStorage.setItem("nightfall-profile-v1", JSON.stringify({ coins: 0, weaponUpgrades: {}, unlockedLevelIds: [] }));
+    expect(loadProfile().unlockedLevelIds).toContain(LEVELS[0]!.id);
+  });
 });
 
 describe("getWeaponUpgradeLevel", () => {
   it("returns 0 for a weapon with no recorded upgrade", () => {
-    expect(getWeaponUpgradeLevel({ coins: 0, weaponUpgrades: {} }, "pistol")).toBe(0);
+    expect(getWeaponUpgradeLevel({ coins: 0, weaponUpgrades: {}, unlockedLevelIds: [] }, "pistol")).toBe(0);
+  });
+});
+
+describe("isLevelUnlocked / unlockNextLevel", () => {
+  it("only the first level is unlocked on a fresh profile", () => {
+    const profile = loadProfile();
+    expect(isLevelUnlocked(profile, LEVELS[0]!.id)).toBe(true);
+    expect(isLevelUnlocked(profile, LEVELS[1]!.id)).toBe(false);
+  });
+
+  it("unlocks the next level in sequence after completing one", () => {
+    const profile = loadProfile();
+    const updated = unlockNextLevel(profile, LEVELS[0]!.id);
+    expect(isLevelUnlocked(updated, LEVELS[1]!.id)).toBe(true);
+    expect(isLevelUnlocked(updated, LEVELS[2]!.id)).toBe(false);
+  });
+
+  it("does not mutate the input profile", () => {
+    const profile = loadProfile();
+    unlockNextLevel(profile, LEVELS[0]!.id);
+    expect(profile.unlockedLevelIds).toEqual([LEVELS[0]!.id]);
+  });
+
+  it("is a no-op past the last level", () => {
+    const lastLevel = LEVELS[LEVELS.length - 1]!;
+    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS.map((l) => l.id) };
+    const updated = unlockNextLevel(profile, lastLevel.id);
+    expect(updated.unlockedLevelIds).toEqual(profile.unlockedLevelIds);
   });
 });
 
@@ -75,7 +121,7 @@ describe("weaponDamageMultiplier", () => {
 
 describe("purchaseWeaponUpgrade", () => {
   it("deducts the cost and increments the level on a successful purchase", () => {
-    const profile = { coins: 100, weaponUpgrades: {} };
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [] };
     const result = purchaseWeaponUpgrade(profile, "pistol");
     expect(result).not.toBeNull();
     expect(result!.coins).toBe(100 - upgradeCost(0));
@@ -83,19 +129,25 @@ describe("purchaseWeaponUpgrade", () => {
   });
 
   it("does not mutate the input profile", () => {
-    const profile = { coins: 100, weaponUpgrades: {} };
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [] };
     purchaseWeaponUpgrade(profile, "pistol");
     expect(profile.coins).toBe(100);
     expect(profile.weaponUpgrades).toEqual({});
   });
 
+  it("preserves unlockedLevelIds on the returned profile", () => {
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [LEVELS[0]!.id] };
+    const result = purchaseWeaponUpgrade(profile, "pistol");
+    expect(result!.unlockedLevelIds).toEqual([LEVELS[0]!.id]);
+  });
+
   it("returns null when the player can't afford the next level", () => {
-    const profile = { coins: 0, weaponUpgrades: {} };
+    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: [] };
     expect(purchaseWeaponUpgrade(profile, "pistol")).toBeNull();
   });
 
   it("returns null once a weapon is already at the max upgrade level", () => {
-    const profile = { coins: 999_999, weaponUpgrades: { pistol: MAX_WEAPON_UPGRADE_LEVEL } };
+    const profile = { coins: 999_999, weaponUpgrades: { pistol: MAX_WEAPON_UPGRADE_LEVEL }, unlockedLevelIds: [] };
     expect(purchaseWeaponUpgrade(profile, "pistol")).toBeNull();
   });
 });

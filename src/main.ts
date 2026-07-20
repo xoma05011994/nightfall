@@ -11,8 +11,8 @@ import { WeaponPromptModal } from "./ui/weaponPromptModal";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
 import { LEVELS } from "./systems/levels";
-import { loadProfile, purchaseWeaponUpgrade, saveProfile } from "./systems/profile";
-import { WEAPON_DEFS } from "./systems/weapons";
+import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "./systems/profile";
+import { WEAPON_DEFS, isWeaponMaxLevel } from "./systems/weapons";
 import { normalize } from "./math";
 import type { LevelDef } from "./types";
 
@@ -87,7 +87,7 @@ const mainMenu = new MainMenu(uiRoot, {
   },
   onAdventure: () => {
     mainMenu.hide();
-    levelSelectScreen.show();
+    levelSelectScreen.show(profile.unlockedLevelIds);
   },
   onShop: () => {
     mainMenu.hide();
@@ -125,9 +125,11 @@ const game = new Game({
     perkTray.setVisible(false);
     // Coins only bank to the persistent profile on an actual level
     // completion — a defeat still shows the run's gold total, but it's
-    // never saved (see systems/profile.ts).
+    // never saved (see systems/profile.ts). Winning also unlocks the next
+    // level in sequence.
     if (game.mode === "adventure") {
       profile = { ...profile, coins: profile.coins + game.goldEarned };
+      if (game.levelDef) profile = unlockNextLevel(profile, game.levelDef.id);
       saveProfile(profile);
     }
     gameOverScreen.show({ won: true, elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills, gold: game.goldEarned });
@@ -148,6 +150,8 @@ function buildRenderState() {
     beamEffects: game.beamEffects,
     coneEffects: game.coneEffects,
     lightningEffects: game.lightningEffects,
+    enemyProjectiles: game.enemyProjectiles,
+    rewardPopups: game.rewardPopups,
   };
 }
 
@@ -192,7 +196,13 @@ function frame(now: number): void {
   if (game.phase === "playing" || game.phase === "levelup" || game.phase === "weaponPrompt") {
     const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
       const slot = game.player.weaponSlots[i as 0 | 1 | 2];
-      return { name: slot ? WEAPON_DEFS[slot.weaponId].name : null, equipped: game.player.equippedSlot === i };
+      return {
+        name: slot ? WEAPON_DEFS[slot.weaponId].name : null,
+        equipped: game.player.equippedSlot === i,
+        icon: slot ? WEAPON_DEFS[slot.weaponId].icon : null,
+        level: slot?.level ?? 1,
+        maxed: slot ? isWeaponMaxLevel(slot.level) : false,
+      };
     }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
 
     const equipped = game.player.weaponSlots[game.player.equippedSlot];

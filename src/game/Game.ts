@@ -10,10 +10,12 @@ import {
   PLAYER_BASE_MOVE_SPEED,
   PLAYER_BASE_PICKUP_RADIUS,
   PLAYER_RADIUS,
+  REWARD_POPUP_LIFETIME_MS,
+  WEAPON_MAX_LEVEL,
 } from "../constants";
 import { mulberry32, normalize } from "../math";
-import { createBoss, createEnemy, currentSpawnIntervalMs, spawnPositionAround } from "../systems/spawner";
-import { resolveEnemyContactDamage, resolveProjectileHits, stepEnemies, stepProjectiles } from "../systems/combat";
+import { createBoss, createEnemy, currentSpawnIntervalMs, pickEnemyType, spawnPositionAround } from "../systems/spawner";
+import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "../systems/combat";
 import { collectDeadEnemies } from "../systems/enemies";
 import { stepAura, stepBurningEnemies } from "../systems/statusEffects";
 import { findTouchedChest, rollChestReward, spawnChest } from "../systems/chests";
@@ -35,6 +37,7 @@ import type {
   Perk,
   Player,
   Projectile,
+  RewardPopupEffect,
   Vec2,
   WeaponId,
   WeaponPickup,
@@ -92,12 +95,14 @@ export class Game {
   player: Player = createPlayer();
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
+  enemyProjectiles: Projectile[] = [];
   xpOrbs: XpOrb[] = [];
   weaponPickups: WeaponPickup[] = [];
   chests: Chest[] = [];
   beamEffects: BeamEffect[] = [];
   coneEffects: ConeEffect[] = [];
   lightningEffects: LightningEffect[] = [];
+  rewardPopups: RewardPopupEffect[] = [];
   elapsedMs = 0;
   kills = 0;
   goldEarned = 0;
@@ -110,6 +115,7 @@ export class Game {
   private chestSpawnTimerMs = CHEST_SPAWN_INTERVAL_MS;
   private nextEnemyId = 1;
   private nextProjectileId = 1;
+  private nextEnemyProjectileId = 1;
   private nextOrbId = 1;
   private nextPickupId = 1;
   private nextChestId = 1;
@@ -117,6 +123,10 @@ export class Game {
   private declinedPickupId: number | null = null;
   private adventureBoss1Spawned = false;
   private adventureBoss2Spawned = false;
+  // The boss that must die for Adventure victory — set when it spawns at the
+  // 6-minute mark. The run keeps going past that mark (timer, spawns, etc.
+  // don't stop) until this specific enemy is killed.
+  private boss2Id: number | null = null;
   // Meta-progression weapon upgrade levels — only ever populated in
   // Adventure mode (see start()'s weaponUpgrades param).
   private weaponUpgrades: Partial<Record<WeaponId, number>> = {};
@@ -140,12 +150,14 @@ export class Game {
     this.player = createPlayer();
     this.enemies = [];
     this.projectiles = [];
+    this.enemyProjectiles = [];
     this.xpOrbs = [];
     this.weaponPickups = [];
     this.chests = [];
     this.beamEffects = [];
     this.coneEffects = [];
     this.lightningEffects = [];
+    this.rewardPopups = [];
     this.elapsedMs = 0;
     this.kills = 0;
     this.goldEarned = 0;
@@ -154,6 +166,7 @@ export class Game {
     this.chestSpawnTimerMs = CHEST_SPAWN_INTERVAL_MS;
     this.nextEnemyId = 1;
     this.nextProjectileId = 1;
+    this.nextEnemyProjectileId = 1;
     this.nextOrbId = 1;
     this.nextPickupId = 1;
     this.nextChestId = 1;
@@ -161,6 +174,7 @@ export class Game {
     this.declinedPickupId = null;
     this.adventureBoss1Spawned = false;
     this.adventureBoss2Spawned = false;
+    this.boss2Id = null;
     this.phase = "playing";
   }
 
@@ -196,23 +210,31 @@ export class Game {
           nextProjectileId: this.nextProjectileId,
         }, nowMs);
         this.handleDeadEnemies(collectDeadEnemies(this.enemies));
+        if (this.phase !== "playing") return;
       }
     }
     this.beamEffects = this.beamEffects.filter((b) => b.expiresAtMs > nowMs);
     this.coneEffects = this.coneEffects.filter((c) => c.expiresAtMs > nowMs);
     this.lightningEffects = this.lightningEffects.filter((l) => l.expiresAtMs > nowMs);
+    this.rewardPopups = this.rewardPopups.filter((p) => p.expiresAtMs > nowMs);
 
     this.projectiles = stepProjectiles(this.projectiles, dt);
     const { survivingProjectiles, deadEnemies } = resolveProjectileHits(this.projectiles, this.enemies, this.player, this.lightningEffects, nowMs);
     this.projectiles = survivingProjectiles;
     this.handleDeadEnemies(deadEnemies);
+    if (this.phase !== "playing") return;
 
-    stepEnemies(this.enemies, this.player.position, dt);
+    this.nextEnemyProjectileId = stepEnemies(this.enemies, this.player.position, dt, this.enemyProjectiles, this.nextEnemyProjectileId);
     for (const enemy of this.enemies) enemy.position = clampToWorldBounds(enemy.position, enemy.radius);
     resolveEnemyContactDamage(this.enemies, this.player);
 
+    this.enemyProjectiles = stepEnemyProjectiles(this.enemyProjectiles, dt);
+    this.enemyProjectiles = resolveEnemyProjectileHits(this.enemyProjectiles, this.player);
+
     this.handleDeadEnemies(stepBurningEnemies(this.player, this.enemies, dt));
+    if (this.phase !== "playing") return;
     this.handleDeadEnemies(stepAura(this.player, this.enemies, dt, this.lightningEffects, nowMs));
+    if (this.phase !== "playing") return;
 
     const { survivingOrbs, xpCollected } = stepXpOrbs(this.xpOrbs, this.player, dt);
     this.xpOrbs = survivingOrbs;
@@ -239,7 +261,7 @@ export class Game {
 
     const touchedChest = findTouchedChest(this.chests, this.player);
     if (touchedChest) {
-      this.handleTouchedChest(touchedChest);
+      this.handleTouchedChest(touchedChest, nowMs);
       if (this.phase !== "playing") return;
     }
 
@@ -247,7 +269,8 @@ export class Game {
     if (this.spawnTimerMs <= 0) {
       this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
       const pos = spawnPositionAround(this.player.position, this.rng);
-      this.enemies.push(createEnemy(this.nextEnemyId++, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+      const type = pickEnemyType(this.elapsedMs, this.rng);
+      this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
     }
 
     this.chestSpawnTimerMs -= dt * 1000;
@@ -264,21 +287,21 @@ export class Game {
         this.adventureBoss1Spawned = true;
         this.spawnBoss();
       }
-      if (this.elapsedMs >= ADVENTURE_DURATION_MS) {
-        if (!this.adventureBoss2Spawned) {
-          this.adventureBoss2Spawned = true;
-          this.spawnBoss();
-        }
-        this.phase = "victory";
-        this.callbacks.onVictory();
-        return;
+      // Victory is now killing this boss, not just surviving to the mark —
+      // the run keeps going (timer, spawns, everything) past 6:00 until it
+      // dies (see handleDeadEnemies).
+      if (!this.adventureBoss2Spawned && this.elapsedMs >= ADVENTURE_DURATION_MS) {
+        this.adventureBoss2Spawned = true;
+        this.boss2Id = this.spawnBoss().id;
       }
     }
   }
 
-  private spawnBoss(): void {
+  private spawnBoss(): Enemy {
     const pos = spawnPositionAround(this.player.position, this.rng);
-    this.enemies.push(createBoss(this.nextEnemyId++, clampToWorldBounds(pos, BOSS_RADIUS), this.elapsedMs));
+    const boss = createBoss(this.nextEnemyId++, clampToWorldBounds(pos, BOSS_RADIUS), this.elapsedMs);
+    this.enemies.push(boss);
+    return boss;
   }
 
   // Folds meta-progression weapon upgrades, Berserker (damage scales with
@@ -303,26 +326,39 @@ export class Game {
     const { leveledUp } = grantXp(this.player, amount);
     if (leveledUp) {
       this.phase = "levelup";
-      this.callbacks.onLevelUp(rollPerkOffers(this.rng));
+      this.callbacks.onLevelUp(rollPerkOffers(this.rng, this.pickedPerks));
     }
   }
 
-  private handleTouchedChest(chest: Chest): void {
+  private pushRewardPopup(kind: RewardPopupEffect["kind"], text: string, nowMs: number): void {
+    this.rewardPopups.push({
+      position: { x: this.player.position.x, y: this.player.position.y },
+      kind,
+      text,
+      startMs: nowMs,
+      expiresAtMs: nowMs + REWARD_POPUP_LIFETIME_MS,
+    });
+  }
+
+  private handleTouchedChest(chest: Chest, nowMs: number): void {
     this.chests = this.chests.filter((c) => c.id !== chest.id);
     const reward = rollChestReward(this.rng);
     if (reward.type === "gold") {
-      this.goldEarned += Math.round(reward.amount * this.player.goldMultiplier);
+      const amount = Math.round(reward.amount * this.player.goldMultiplier);
+      this.goldEarned += amount;
+      this.pushRewardPopup("gold", `+${amount} Gold`, nowMs);
     } else if (reward.type === "xp") {
+      this.pushRewardPopup("xp", `+${reward.amount} XP`, nowMs);
       this.grantXpAndCheckLevelUp(reward.amount);
     } else if (reward.type === "magnet") {
-      // Instantly collects every XP orb currently on the map, rather than
-      // pulling them in over time like the passive pickup radius does.
-      const total = this.xpOrbs.reduce((sum, orb) => sum + orb.value, 0);
-      this.xpOrbs = [];
-      if (total > 0) this.grantXpAndCheckLevelUp(total);
+      // Marks every orb currently on the map so stepXpOrbs pulls them all in
+      // visually at a fast fixed speed, instead of an instant invisible grant.
+      for (const orb of this.xpOrbs) orb.magnetized = true;
+      this.pushRewardPopup("magnet", "Magnet!", nowMs);
     } else {
+      this.pushRewardPopup("perk", "Perk!", nowMs);
       this.phase = "levelup";
-      this.callbacks.onLevelUp(rollPerkOffers(this.rng));
+      this.callbacks.onLevelUp(rollPerkOffers(this.rng, this.pickedPerks));
     }
   }
 
@@ -337,10 +373,26 @@ export class Game {
       this.xpOrbs.push(spawnXpOrbForEnemy(this.nextOrbId++, enemy));
       const dropId = rollWeaponDrop(this.rng);
       if (dropId) this.weaponPickups.push(spawnWeaponPickup(this.nextPickupId++, dropId, enemy.position));
+      if (this.mode === "adventure" && this.boss2Id !== null && enemy.id === this.boss2Id) {
+        this.phase = "victory";
+        this.callbacks.onVictory();
+      }
     }
   }
 
   private handleTouchedPickup(pickup: WeaponPickup): void {
+    // A duplicate of a weapon type already held levels it up (capped at
+    // WEAPON_MAX_LEVEL) instead of prompting a slot swap — no slot is ever
+    // empty-checked for this case since pistol (slot 0) isn't droppable, so
+    // a match can only be against slot 1 or 2.
+    const heldSlotIndex = this.player.weaponSlots.findIndex((s) => s?.weaponId === pickup.weaponId);
+    if (heldSlotIndex > 0) {
+      const held = this.player.weaponSlots[heldSlotIndex as 1 | 2]!;
+      if (held.level < WEAPON_MAX_LEVEL) held.level += 1;
+      this.removePickup(pickup.id);
+      return;
+    }
+
     const slot2 = this.player.weaponSlots[1];
     const slot3 = this.player.weaponSlots[2];
     if (!slot2) {

@@ -41,6 +41,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
 export function makeEnemy(overrides: Partial<Enemy> = {}): Enemy {
   return {
     id: 1,
+    type: "grunt",
     position: { x: 100, y: 0 },
     hp: 20,
     maxHp: 20,

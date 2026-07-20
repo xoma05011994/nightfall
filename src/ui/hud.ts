@@ -1,6 +1,9 @@
 export interface HudWeaponSlot {
   name: string | null;
   equipped: boolean;
+  icon: string | null;
+  level: number;
+  maxed: boolean;
 }
 
 export interface HudData {
@@ -58,9 +61,9 @@ export class Hud {
       </div>
       <div class="hud-bottom-center">
         <div class="hud-weapon-slots">
-          <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><span class="weapon-slot-name">Sidearm</span></div>
-          <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><span class="weapon-slot-name">—</span></div>
-          <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><span class="weapon-slot-name">—</span></div>
+          <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">Sidearm</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
         </div>
         <div class="hud-ammo-track"><div class="hud-ammo-fill" style="width:100%"></div></div>
         <div class="hud-ammo-text">10 / 10</div>
@@ -96,8 +99,13 @@ export class Hud {
       if (!el) return;
       el.classList.toggle("equipped", slot.equipped);
       el.classList.toggle("empty", slot.name === null);
+      el.classList.toggle("maxed", slot.maxed);
       const nameEl = el.querySelector(".weapon-slot-name");
       if (nameEl) nameEl.textContent = slot.name ?? "—";
+      const iconEl = el.querySelector(".weapon-slot-icon");
+      if (iconEl) iconEl.innerHTML = slot.icon ?? "";
+      const levelEl = el.querySelector(".weapon-slot-level");
+      if (levelEl) levelEl.textContent = slot.name === null ? "" : slot.maxed ? "MAX" : `Lv${slot.level}`;
     });
 
     if (data.reloading) {

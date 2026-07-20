@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PERK_MAX_RANK } from "../src/constants";
 import { PERKS, getPerkById, rollPerkOffers } from "../src/systems/perks";
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 15 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(15);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(15);
+  it("has exactly 16 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(16);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(16);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -127,17 +128,56 @@ describe("PERKS", () => {
     getPerkById("damage")!.apply(player);
     expect(player.damageMultiplier).toBeCloseTo(1.5625, 5);
   });
+
+  it("storm conduit perk boosts chain lightning damage and radius further", () => {
+    const player = makePlayer();
+    getPerkById("lightning")!.apply(player);
+    getPerkById("stormConduit")!.apply(player);
+    expect(player.lightningChainDamage).toBe(24);
+    expect(player.lightningChainRadius).toBe(240);
+  });
+
+  it("wildfire and overload require their prerequisite perk", () => {
+    expect(getPerkById("wildfire")!.requires).toEqual(["ignite"]);
+    expect(getPerkById("overload")!.requires).toEqual(["lightning"]);
+    expect(getPerkById("stormConduit")!.requires).toEqual(["ignite", "lightning"]);
+  });
 });
 
 describe("rollPerkOffers", () => {
   it("returns the requested count of distinct perks", () => {
-    const offers = rollPerkOffers(() => 0.5, 3);
+    const offers = rollPerkOffers(() => 0.5, [], 3);
     expect(offers).toHaveLength(3);
     expect(new Set(offers.map((p) => p.id)).size).toBe(3);
   });
 
-  it("never offers more perks than exist in the pool", () => {
-    const offers = rollPerkOffers(() => 0.9, PERKS.length + 10);
-    expect(offers).toHaveLength(PERKS.length);
+  it("never offers more perks than are eligible in the pool", () => {
+    // With nothing picked yet, Wildfire/Overload/Storm Conduit are all
+    // gated out (their prerequisites aren't met), so the eligible pool is
+    // smaller than PERKS.length.
+    const gatedCount = PERKS.filter((p) => p.requires && p.requires.length > 0).length;
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10);
+    expect(offers).toHaveLength(PERKS.length - gatedCount);
+  });
+
+  it("excludes a perk whose prerequisites aren't met yet", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10);
+    expect(offers.some((p) => p.id === "wildfire")).toBe(false);
+    expect(offers.some((p) => p.id === "overload")).toBe(false);
+    expect(offers.some((p) => p.id === "stormConduit")).toBe(false);
+  });
+
+  it("offers a gated perk once its prerequisites are picked", () => {
+    const picked = [{ perk: getPerkById("ignite")!, count: 1 }];
+    const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
+    expect(offers.some((p) => p.id === "wildfire")).toBe(true);
+    expect(offers.some((p) => p.id === "overload")).toBe(false);
+    expect(offers.some((p) => p.id === "stormConduit")).toBe(false);
+  });
+
+  it("excludes a perk that's already at max rank", () => {
+    const picked = [{ perk: getPerkById("damage")!, count: PERK_MAX_RANK }];
+    const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
+    expect(offers.some((p) => p.id === "damage")).toBe(false);
   });
 });

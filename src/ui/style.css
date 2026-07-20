@@ -152,14 +152,44 @@
   box-shadow: 0 0 10px rgba(200, 30, 30, 0.5);
 }
 
+.weapon-slot.maxed {
+  border-color: #ffcf4a;
+  box-shadow: 0 0 10px rgba(255, 207, 74, 0.5);
+}
+
 .weapon-slot-key {
   font-size: 11px;
   opacity: 0.7;
 }
 
+.weapon-slot-icon {
+  width: 20px;
+  height: 20px;
+  color: #d8cfc2;
+}
+
+.weapon-slot.equipped .weapon-slot-icon {
+  color: #c81e1e;
+}
+
+.weapon-slot.maxed .weapon-slot-icon {
+  color: #ffcf4a;
+}
+
 .weapon-slot-name {
   font-size: 12px;
   white-space: nowrap;
+}
+
+.weapon-slot-level {
+  font-size: 10px;
+  letter-spacing: 1px;
+  opacity: 0.75;
+}
+
+.weapon-slot.maxed .weapon-slot-level {
+  color: #ffcf4a;
+  opacity: 1;
 }
 
 .hud-ammo-track {
@@ -309,6 +339,26 @@
 .level-card:hover {
   border-color: #c81e1e;
   transform: translateY(-4px);
+}
+
+.level-card.locked {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.level-card.locked:hover {
+  border-color: #4a1010;
+  transform: none;
+}
+
+.level-card.locked .level-card-swatch {
+  filter: grayscale(1);
+}
+
+.level-card-lock {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #8a7a6a;
 }
 
 .level-card-swatch {

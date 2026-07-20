@@ -36,7 +36,9 @@ export const FENCE_POST_SPACING = 70;
 
 // v0.2 — weapon drops. Any enemy death has a flat chance to drop one of the
 // 5 pickup-only weapons (uniformly chosen among them).
-export const WEAPON_DROP_CHANCE = 0.06;
+// v0.5 — halved: weapon leveling (picking up a duplicate) makes drops more
+// valuable per-drop, so they need to be rarer to stay a special event.
+export const WEAPON_DROP_CHANCE = 0.03;
 export const WEAPON_PICKUP_RADIUS = 16;
 
 // v0.3 — ignite (burn DoT) and deadly aura perks tick on a fixed interval
@@ -80,3 +82,51 @@ export const MOMENTUM_DURATION_MS = 3000;
 
 // v0.4 — chest reward roll now has 4 equally-weighted outcomes.
 export const CHEST_REWARD_TYPES = ["gold", "xp", "perk", "magnet"] as const;
+
+// v0.5 — Magnet reward now pulls existing orbs in visually (fast homing)
+// rather than instantly granting their value, so it reads as an event
+// instead of a silent number change.
+export const MAGNET_PULL_SPEED = 1600; // px/sec
+
+// v0.5 — floating reward popup (coin/xp/perk/magnet icon) shown above the
+// player when a chest is opened.
+export const REWARD_POPUP_LIFETIME_MS = 1100;
+export const REWARD_POPUP_RISE_PX = 60;
+
+// v0.5 — in-run weapon leveling. Picking up a weapon type you already hold
+// levels it instead of prompting a slot swap; level 10 is MAX and grants a
+// one-time "GIGA" bonus on top of the normal per-level scaling.
+export const WEAPON_MAX_LEVEL = 10;
+export const WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.08; // +8% damage per level above 1
+export const WEAPON_GIGA_COOLDOWN_MULT = 0.85; // -15% cooldown at max level
+export const WEAPON_GIGA_EXTRA_PIERCE = 1;
+export const WEAPON_GIGA_PROJECTILE_SCALE = 1.6;
+
+// v0.5 — perks are capped at 5 ranks (repeat picks) each and excluded from
+// future offers once maxed, so builds can't snowball a single perk forever.
+export const PERK_MAX_RANK = 5;
+
+// v0.5 — enemy variety. Elapsed-time stage boundaries that gate which enemy
+// types can spawn, escalating difficulty roughly once a minute regardless of
+// game mode (Endless just keeps climbing past the last boundary).
+export const ENEMY_STAGE_2_MS = 60_000; // Brute enters the mix
+export const ENEMY_STAGE_3_MS = 120_000; // Brute-heavy
+export const ENEMY_STAGE_4_MS = 180_000; // Shooter enters (past Adventure boss 1)
+export const ENEMY_STAGE_5_MS = 240_000; // Shooter + Brute heavier
+export const ENEMY_STAGE_6_MS = 300_000; // Hardest pre-boss-2 mix
+
+export const BRUTE_HP_MULT = 3;
+export const BRUTE_DAMAGE_MULT = 1.6;
+export const BRUTE_SPEED_MULT = 0.6;
+export const BRUTE_RADIUS = ENEMY_RADIUS * 1.5;
+
+export const SHOOTER_HP_MULT = 0.6;
+export const SHOOTER_DAMAGE_MULT = 0.5; // contact damage only — its threat is the ranged shot
+export const SHOOTER_SPEED_MULT = 0.85;
+export const SHOOTER_PREFERRED_RANGE = 260; // tries to hover at this distance from the player
+export const SHOOTER_PROJECTILE_SPEED = 220; // slow "missile", meant to be dodgeable
+export const SHOOTER_PROJECTILE_DAMAGE = 10;
+export const SHOOTER_PROJECTILE_RADIUS = 7;
+export const SHOOTER_PROJECTILE_TTL_MS = 3500;
+export const SHOOTER_FIRE_COOLDOWN_MS = 2200;
+export const SHOOTER_PROJECTILE_COLOR = "#b23fff";

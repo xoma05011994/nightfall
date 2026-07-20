@@ -16,6 +16,9 @@ export interface WeaponDef {
   magazineSize: number;
   reloadMs: number;
   color: string;
+  // Inner SVG markup (no <svg> wrapper) for a 24x24 viewBox icon, drawn with
+  // currentColor — used by the HUD weapon slots.
+  icon: string;
   pickupLocked?: boolean; // true only for the pistol — can't be dropped or swapped out
   projectileSpeed?: number; // projectile | spread | explosive
   pelletCount?: number; // spread
@@ -33,6 +36,11 @@ export interface WeaponInstance {
   fireTimerMs: number; // counts down to 0, then a shot/tick is allowed
   reloading: boolean;
   reloadTimerMs: number;
+  // In-run leveling (distinct from the meta-progression shop upgrades):
+  // picking up a weapon type you already hold levels this instance up
+  // instead of prompting a slot swap. Caps at WEAPON_MAX_LEVEL, where it
+  // gets a distinct "GIGA" damage/pierce/cooldown bonus (see weapons.ts).
+  level: number;
 }
 
 export type WeaponSlots = [WeaponInstance, WeaponInstance | null, WeaponInstance | null];
@@ -73,8 +81,11 @@ export interface Player {
   goldMultiplier: number;
 }
 
+export type EnemyType = "grunt" | "brute" | "shooter" | "boss";
+
 export interface Enemy {
   id: number;
+  type: EnemyType;
   position: Vec2;
   hp: number;
   maxHp: number;
@@ -88,6 +99,11 @@ export interface Enemy {
   burnDamagePerTick: number;
   burnTicksRemaining: number;
   burnTickTimerMs: number;
+  // Shooter AI only — keeps its distance and fires a slow projectile at the
+  // player instead of beelining into contact range.
+  preferredRange?: number;
+  shootCooldownMs?: number;
+  shootTimerMs?: number;
 }
 
 export interface Projectile {
@@ -102,6 +118,8 @@ export interface Projectile {
   splashDamage?: number;
   pierceRemaining?: number;
   hitEnemyIds?: number[];
+  // Cosmetic-only flag for a max-level ("GIGA") weapon shot — bigger, glowing.
+  giga?: boolean;
 }
 
 export interface XpOrb {
@@ -109,6 +127,10 @@ export interface XpOrb {
   position: Vec2;
   value: number;
   radius: number;
+  // Set by the Magnet chest reward — pulls this orb toward the player at a
+  // fast fixed speed regardless of pickupRadius, instead of the normal
+  // proximity-based homing (see systems/xp.ts's stepXpOrbs).
+  magnetized?: boolean;
 }
 
 export interface WeaponPickup {
@@ -155,6 +177,18 @@ export interface LightningEffect {
   seed: number;
 }
 
+export type RewardPopupKind = "gold" | "xp" | "perk" | "magnet";
+
+// A chest-open reward — floats up and fades above the player so what dropped
+// reads clearly without needing a text log.
+export interface RewardPopupEffect {
+  position: Vec2;
+  kind: RewardPopupKind;
+  text: string;
+  startMs: number;
+  expiresAtMs: number;
+}
+
 export interface Perk {
   id: string;
   name: string;
@@ -162,6 +196,10 @@ export interface Perk {
   // Inner SVG markup (no <svg> wrapper) for a 24x24 viewBox icon, drawn with
   // currentColor so CSS controls its color.
   icon: string;
+  // Perk ids that must already be picked before this one can be offered —
+  // gates synergy/capstone perks that would otherwise do nothing on their
+  // own (see systems/perks.ts's doc comment).
+  requires?: string[];
   apply: (player: Player) => void;
 }
 

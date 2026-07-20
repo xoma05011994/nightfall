@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ADVENTURE_BOSS_1_TRIGGER_MS, ADVENTURE_DURATION_MS } from "../src/constants";
+import { ADVENTURE_BOSS_1_TRIGGER_MS, ADVENTURE_DURATION_MS, WEAPON_MAX_LEVEL } from "../src/constants";
 import { Game } from "../src/game/Game";
 import { getLevelById } from "../src/systems/levels";
 import { getPerkById } from "../src/systems/perks";
@@ -21,8 +21,8 @@ function makeGame(seed?: number, mode: GameMode = "endless") {
 describe("Game — weapon pickup prompt", () => {
   it("prompts when both extra slots are full and touching a new pickup", () => {
     const { game, callbacks } = makeGame();
-    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
-    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
+    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
     game.weaponPickups.push({ id: 1, position: { ...game.player.position }, weaponId: "rpg", radius: 16 });
 
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
@@ -33,8 +33,8 @@ describe("Game — weapon pickup prompt", () => {
 
   it("declining closes the prompt and does NOT immediately re-open it while still standing on the pickup (regression)", () => {
     const { game, callbacks } = makeGame();
-    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
-    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
+    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
     game.weaponPickups.push({ id: 1, position: { ...game.player.position }, weaponId: "rpg", radius: 16 });
 
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
@@ -55,8 +55,8 @@ describe("Game — weapon pickup prompt", () => {
 
   it("re-prompts for the same pickup after the player walks away and back", () => {
     const { game, callbacks } = makeGame();
-    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
-    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
+    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
     game.weaponPickups.push({ id: 1, position: { x: 0, y: 0 }, weaponId: "rpg", radius: 16 });
     game.player.position = { x: 0, y: 0 };
 
@@ -75,8 +75,8 @@ describe("Game — weapon pickup prompt", () => {
 
   it("accepting a slot replacement removes the pickup and equips the new weapon", () => {
     const { game } = makeGame();
-    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
-    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0 };
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
+    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
     game.weaponPickups.push({ id: 1, position: { ...game.player.position }, weaponId: "rpg", radius: 16 });
 
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
@@ -84,6 +84,32 @@ describe("Game — weapon pickup prompt", () => {
 
     expect(game.phase).toBe("playing");
     expect(game.player.weaponSlots[1]?.weaponId).toBe("rpg");
+    expect(game.weaponPickups).toHaveLength(0);
+  });
+});
+
+describe("Game — in-run weapon leveling", () => {
+  it("picking up a weapon type already held levels it up instead of prompting", () => {
+    const { game, callbacks } = makeGame();
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
+    game.weaponPickups.push({ id: 1, position: { ...game.player.position }, weaponId: "shotgun", radius: 16 });
+
+    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+
+    expect(game.phase).toBe("playing");
+    expect(callbacks.onWeaponPrompt).not.toHaveBeenCalled();
+    expect(game.player.weaponSlots[1]?.level).toBe(2);
+    expect(game.weaponPickups).toHaveLength(0);
+  });
+
+  it("caps weapon level at WEAPON_MAX_LEVEL and keeps consuming pickups past it", () => {
+    const { game } = makeGame();
+    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: WEAPON_MAX_LEVEL };
+    game.weaponPickups.push({ id: 1, position: { ...game.player.position }, weaponId: "shotgun", radius: 16 });
+
+    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+
+    expect(game.player.weaponSlots[1]?.level).toBe(WEAPON_MAX_LEVEL);
     expect(game.weaponPickups).toHaveLength(0);
   });
 });
@@ -140,25 +166,36 @@ describe("Game — chests", () => {
     expect(found!.goldEarned).toBeGreaterThan(0);
   });
 
-  it("a magnet reward collects all xp orbs on the map into the player's xp", () => {
+  it("a magnet reward marks every xp orb on the map to home in on the player", () => {
     // Seed chosen empirically to land a magnet reward. Orbs are placed far
-    // from the player so only the magnet effect (not proximity pickup)
-    // could account for them disappearing.
+    // from the player and pickupRadius — only the magnet flag (not normal
+    // proximity homing) could account for them being marked.
     let matched = false;
     for (let seed = 1; seed <= 50 && !matched; seed++) {
       const { game } = makeGame(seed);
-      const levelBefore = game.player.level;
       game.xpOrbs.push({ id: 1, position: { x: 5000, y: 5000 }, value: 15, radius: 6 });
       game.xpOrbs.push({ id: 2, position: { x: -5000, y: -5000 }, value: 10, radius: 6 });
       game.chests.push({ id: 1, position: { ...game.player.position }, radius: 18 });
       game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
-      // A magnet reward clears every orb on the map and grants their
-      // combined value as xp, which may trigger a level-up.
-      if (game.xpOrbs.length === 0 && game.player.level > levelBefore) {
+      if (game.xpOrbs.length === 2 && game.xpOrbs.every((o) => o.magnetized)) {
         matched = true;
       }
     }
     expect(matched).toBe(true);
+  });
+
+  it("a magnetized orb actually reaches and is collected by the player over time", () => {
+    const { game } = makeGame(1);
+    const levelBefore = game.player.level;
+    game.xpOrbs.push({ id: 1, position: { x: 200, y: 0 }, value: 100, radius: 6, magnetized: true });
+    // Small steps (well under the pull speed's per-frame travel vs. the
+    // capture radius) so the discrete homing can't overshoot back and forth
+    // past the player forever — mirrors a real ~60fps frame budget.
+    for (let i = 0; i < 400 && game.xpOrbs.length > 0; i++) {
+      game.update(0.005, { x: 0, y: 0 }, { x: 1, y: 0 }, false, i * 5);
+    }
+    expect(game.xpOrbs).toHaveLength(0);
+    expect(game.player.level).toBeGreaterThan(levelBefore);
   });
 
   it("a perk reward pauses the game in the levelup phase and offers perk choices", () => {
@@ -204,18 +241,46 @@ describe("Game — Adventure mode", () => {
     expect(game.enemies.filter((e) => e.isBoss).length).toBe(bossCountAfterFirst);
   });
 
-  it("declares victory once the player survives to the 6-minute mark", () => {
+  it("spawns the second boss at the 6-minute mark without declaring victory yet", () => {
     const { game, callbacks } = makeGame(1, "adventure");
     game.update(ADVENTURE_DURATION_MS / 1000, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    // Boss 1 (3min) + boss 2 (6min) — both should have spawned by now, but
+    // victory is now killing boss 2, not just reaching the clock mark.
+    expect(game.enemies.filter((e) => e.isBoss).length).toBe(2);
+    expect(game.phase).toBe("playing");
+    expect(callbacks.onVictory).not.toHaveBeenCalled();
+  });
+
+  it("keeps running past the 6-minute mark — timer, spawns, everything — until boss 2 dies", () => {
+    const { game } = makeGame(1, "adventure");
+    game.update(ADVENTURE_DURATION_MS / 1000, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    const elapsedAtMark = game.elapsedMs;
+    game.update(5, { x: 0, y: 0 }, { x: 1, y: 0 }, false, ADVENTURE_DURATION_MS + 1000);
+    expect(game.phase).toBe("playing");
+    expect(game.elapsedMs).toBeGreaterThan(elapsedAtMark);
+  });
+
+  it("declares victory once boss 2 is killed", () => {
+    const { game, callbacks } = makeGame(1, "adventure");
+    game.update(ADVENTURE_DURATION_MS / 1000, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    // Boss 1 (3min) spawned first and is still first in the array — boss 2
+    // (6min, the actual win condition) is the most recently spawned boss.
+    const bosses = game.enemies.filter((e) => e.isBoss);
+    const boss2 = bosses[bosses.length - 1]!;
+    boss2.hp = -1;
+    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, ADVENTURE_DURATION_MS + 16);
     expect(game.phase).toBe("victory");
     expect(callbacks.onVictory).toHaveBeenCalledOnce();
   });
 
-  it("spawns the second boss at the same moment victory is declared", () => {
-    const { game } = makeGame(1, "adventure");
-    game.update(ADVENTURE_DURATION_MS / 1000, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
-    // Boss 1 (3min) + boss 2 (6min) — both should have spawned by now.
-    expect(game.enemies.filter((e) => e.isBoss).length).toBe(2);
+  it("killing boss 1 alone (before boss 2 spawns) never declares victory", () => {
+    const { game, callbacks } = makeGame(1, "adventure");
+    game.update(ADVENTURE_BOSS_1_TRIGGER_MS / 1000, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    const boss1 = game.enemies.find((e) => e.isBoss)!;
+    boss1.hp = -1;
+    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, ADVENTURE_BOSS_1_TRIGGER_MS + 16);
+    expect(game.phase).toBe("playing");
+    expect(callbacks.onVictory).not.toHaveBeenCalled();
   });
 
   it("death before 6 minutes ends the run in defeat, not victory", () => {
