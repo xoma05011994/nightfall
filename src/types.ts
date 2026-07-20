@@ -207,9 +207,9 @@ export interface WeaponPromptInfo {
   weaponId: WeaponId;
 }
 
-export type GamePhase = "start" | "playing" | "levelup" | "weaponPrompt" | "gameover" | "victory";
+export type GamePhase = "start" | "playing" | "paused" | "levelup" | "weaponPrompt" | "gameover" | "victory";
 
-export type GameMode = "endless" | "adventure";
+export type GameMode = "endless" | "adventure" | "sandbox";
 
 export interface LevelPalette {
   bg: string;

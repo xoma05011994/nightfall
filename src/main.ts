@@ -8,13 +8,16 @@ import { ShopScreen } from "./ui/shopScreen";
 import { PerkModal } from "./ui/perkModal";
 import { GameOverScreen } from "./ui/gameOverScreen";
 import { WeaponPromptModal } from "./ui/weaponPromptModal";
+import { PauseModal } from "./ui/pauseModal";
+import { SandboxPanel } from "./ui/sandboxPanel";
+import { PerkTreeScreen } from "./ui/perkTreeScreen";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
 import { LEVELS } from "./systems/levels";
 import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "./systems/profile";
 import { WEAPON_DEFS, isWeaponMaxLevel } from "./systems/weapons";
 import { normalize } from "./math";
-import type { LevelDef } from "./types";
+import type { GameMode, LevelDef } from "./types";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root")!;
@@ -25,6 +28,12 @@ const hud = new Hud(uiRoot);
 const perkTray = new PerkTray(uiRoot);
 const perkModal = new PerkModal(uiRoot);
 const weaponPromptModal = new WeaponPromptModal(uiRoot);
+const sandboxPanel = new SandboxPanel(uiRoot, {
+  onSpawnEnemy: (type) => game.sandboxSpawnEnemy(type),
+  onClearEnemies: () => game.sandboxClearEnemies(),
+  onEquipWeapon: (weaponId, level) => game.sandboxEquipWeapon(1, weaponId, level),
+  onApplyPerk: (perk) => game.sandboxApplyPerk(perk),
+});
 
 let profile = loadProfile();
 
@@ -32,11 +41,36 @@ function showMainMenu(): void {
   mainMenu.show();
 }
 
-function startRun(mode: "endless" | "adventure", levelDef: LevelDef | null): void {
+function leaveRunToMenu(): void {
+  game.leaveToMenu();
+  pauseModal.hide();
+  hud.setVisible(false);
+  perkTray.setVisible(false);
+  sandboxPanel.setVisible(false);
+  showMainMenu();
+}
+
+const pauseModal = new PauseModal(
+  uiRoot,
+  () => {
+    game.resume();
+    pauseModal.hide();
+  },
+  leaveRunToMenu,
+);
+
+const perkTreeScreen = new PerkTreeScreen(uiRoot, () => {
+  perkTreeScreen.hide();
+  showMainMenu();
+});
+
+function startRun(mode: GameMode, levelDef: LevelDef | null): void {
   renderer.setPalette(levelDef?.palette ?? null);
   game.start(mode, levelDef, profile.weaponUpgrades);
   hud.setVisible(true);
   perkTray.setVisible(true);
+  sandboxPanel.setVisible(mode === "sandbox");
+  sandboxPrevEnemyHp = new Map();
 }
 
 const gameOverScreen = new GameOverScreen(uiRoot, () => {
@@ -92,6 +126,14 @@ const mainMenu = new MainMenu(uiRoot, {
   onShop: () => {
     mainMenu.hide();
     shopScreen.show(profile);
+  },
+  onSandbox: () => {
+    mainMenu.hide();
+    startRun("sandbox", null);
+  },
+  onPerkTree: () => {
+    mainMenu.hide();
+    perkTreeScreen.show();
   },
 });
 
@@ -176,6 +218,11 @@ new ResizeObserver(resize).observe(document.body);
 resize();
 
 let lastTime = performance.now();
+// Snapshotted each frame in Sandbox mode to compute a live "damage dealt"
+// readout by comparing enemy hp before/after game.update() — a dead enemy's
+// full remaining hp counts as damage dealt that frame (not exact on
+// overkill, but close enough for a dev readout).
+let sandboxPrevEnemyHp = new Map<number, number>();
 
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
@@ -190,10 +237,30 @@ function frame(now: number): void {
   if (input.consumeJustPressed("Digit2")) game.equipSlot(1);
   if (input.consumeJustPressed("Digit3")) game.equipSlot(2);
   if (input.consumeJustPressed("KeyR")) game.reloadEquipped();
+  if (input.consumeJustPressed("Escape")) {
+    if (game.phase === "playing") {
+      game.pause();
+      pauseModal.show();
+    } else if (game.phase === "paused") {
+      game.resume();
+      pauseModal.hide();
+    }
+  }
 
   game.update(dt, moveVector, aimDir, fireHeld, now);
 
-  if (game.phase === "playing" || game.phase === "levelup" || game.phase === "weaponPrompt") {
+  if (game.mode === "sandbox" && (game.phase === "playing" || game.phase === "paused")) {
+    const prevHp = sandboxPrevEnemyHp;
+    let damage = 0;
+    for (const [id, hp] of prevHp) {
+      const enemy = game.enemies.find((e) => e.id === id);
+      damage += enemy ? Math.max(0, hp - enemy.hp) : hp;
+    }
+    sandboxPanel.setDamageReadout(`${damage.toFixed(0)} dmg`);
+    sandboxPrevEnemyHp = new Map(game.enemies.map((e) => [e.id, e.hp]));
+  }
+
+  if (game.phase === "playing" || game.phase === "paused" || game.phase === "levelup" || game.phase === "weaponPrompt") {
     const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
       const slot = game.player.weaponSlots[i as 0 | 1 | 2];
       return {

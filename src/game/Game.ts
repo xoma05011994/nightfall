@@ -30,6 +30,7 @@ import type {
   Chest,
   ConeEffect,
   Enemy,
+  EnemyType,
   GameMode,
   GamePhase,
   LevelDef,
@@ -120,7 +121,6 @@ export class Game {
   private nextPickupId = 1;
   private nextChestId = 1;
   private pendingPickup: WeaponPickup | null = null;
-  private declinedPickupId: number | null = null;
   private adventureBoss1Spawned = false;
   private adventureBoss2Spawned = false;
   // The boss that must die for Adventure victory — set when it spawns at the
@@ -171,7 +171,6 @@ export class Game {
     this.nextPickupId = 1;
     this.nextChestId = 1;
     this.pendingPickup = null;
-    this.declinedPickupId = null;
     this.adventureBoss1Spawned = false;
     this.adventureBoss2Spawned = false;
     this.boss2Id = null;
@@ -243,20 +242,19 @@ export class Game {
       if (this.phase !== "playing") return;
     }
 
-    if (this.player.hp <= 0) {
+    // Sandbox is a testing sandbox, not a real run — no death, no timed
+    // waves/chests, so perks/weapons/enemies can be spawned freely and left
+    // alone to inspect.
+    if (this.mode !== "sandbox" && this.player.hp <= 0) {
       this.phase = "gameover";
       this.callbacks.onGameOver();
       return;
     }
 
     const touched = findTouchedPickup(this.weaponPickups, this.player);
-    if (touched && touched.id !== this.declinedPickupId) {
+    if (touched) {
       this.handleTouchedPickup(touched);
       if (this.phase !== "playing") return;
-    } else if (!touched) {
-      // Player has walked off every pickup — allow a re-approach to prompt
-      // again later (they may have changed their mind or freed up a slot).
-      this.declinedPickupId = null;
     }
 
     const touchedChest = findTouchedChest(this.chests, this.player);
@@ -265,19 +263,21 @@ export class Game {
       if (this.phase !== "playing") return;
     }
 
-    this.spawnTimerMs -= dt * 1000;
-    if (this.spawnTimerMs <= 0) {
-      this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
-      const pos = spawnPositionAround(this.player.position, this.rng);
-      const type = pickEnemyType(this.elapsedMs, this.rng);
-      this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
-    }
+    if (this.mode !== "sandbox") {
+      this.spawnTimerMs -= dt * 1000;
+      if (this.spawnTimerMs <= 0) {
+        this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
+        const pos = spawnPositionAround(this.player.position, this.rng);
+        const type = pickEnemyType(this.elapsedMs, this.rng);
+        this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+      }
 
-    this.chestSpawnTimerMs -= dt * 1000;
-    if (this.chestSpawnTimerMs <= 0) {
-      this.chestSpawnTimerMs = CHEST_SPAWN_INTERVAL_MS;
-      const pos = spawnPositionAround(this.player.position, this.rng);
-      this.chests.push(spawnChest(this.nextChestId++, clampToWorldBounds(pos, 0)));
+      this.chestSpawnTimerMs -= dt * 1000;
+      if (this.chestSpawnTimerMs <= 0) {
+        this.chestSpawnTimerMs = CHEST_SPAWN_INTERVAL_MS;
+        const pos = spawnPositionAround(this.player.position, this.rng);
+        this.chests.push(spawnChest(this.nextChestId++, clampToWorldBounds(pos, 0)));
+      }
     }
 
     this.elapsedMs += dt * 1000;
@@ -408,17 +408,14 @@ export class Game {
     }
   }
 
-  // `choice` is null when the player declines — the pickup stays in the
-  // world so they can grab it later if they change their mind, but is
-  // marked as declined so standing on it doesn't instantly re-open the same
-  // prompt on the very next frame (cleared once they walk off it entirely).
+  // `choice` is null when the player declines — the pickup is discarded
+  // either way (equipped into a slot, or simply removed from the world),
+  // so there's never a leftover pickup to re-trigger this same prompt.
   resolveWeaponPrompt(choice: 1 | 2 | null): void {
     if (this.pendingPickup && choice !== null) {
       this.equipIntoSlot(choice, this.pendingPickup.weaponId);
-      this.removePickup(this.pendingPickup.id);
-    } else if (this.pendingPickup) {
-      this.declinedPickupId = this.pendingPickup.id;
     }
+    if (this.pendingPickup) this.removePickup(this.pendingPickup.id);
     this.pendingPickup = null;
     this.phase = "playing";
   }
@@ -429,6 +426,48 @@ export class Game {
 
   private removePickup(id: number): void {
     this.weaponPickups = this.weaponPickups.filter((p) => p.id !== id);
+  }
+
+  pause(): void {
+    if (this.phase === "playing") this.phase = "paused";
+  }
+
+  resume(): void {
+    if (this.phase === "paused") this.phase = "playing";
+  }
+
+  // Abandons the current run cleanly — update() only ever simulates while
+  // phase is "playing", so parking it back at "start" (the same phase a
+  // freshly-constructed Game starts in) is enough to freeze everything.
+  leaveToMenu(): void {
+    this.phase = "start";
+  }
+
+  // Spawns an enemy just off-screen of the player, for the Sandbox mode's
+  // manual spawn controls — reuses the same createEnemy/createBoss factories
+  // as the real spawner so stats stay consistent with actual play.
+  sandboxSpawnEnemy(type: EnemyType): void {
+    const pos = spawnPositionAround(this.player.position, this.rng);
+    const clamped = clampToWorldBounds(pos, type === "boss" ? BOSS_RADIUS : ENEMY_RADIUS);
+    const enemy = type === "boss" ? createBoss(this.nextEnemyId++, clamped, this.elapsedMs) : createEnemy(this.nextEnemyId++, type, clamped, this.elapsedMs);
+    this.enemies.push(enemy);
+  }
+
+  sandboxClearEnemies(): void {
+    this.enemies = [];
+  }
+
+  // Applies a perk immediately, bypassing the normal level-up offer/roll
+  // flow and its prerequisite/rank-cap gating — Sandbox is for free
+  // experimentation, not a real run.
+  sandboxApplyPerk(perk: Perk): void {
+    this.applyPerk(perk);
+  }
+
+  // Equips (or re-levels, if already held) a weapon directly into slot 1 or
+  // 2 at a specific level, skipping the normal drop/pickup flow.
+  sandboxEquipWeapon(slotIndex: 1 | 2, weaponId: WeaponId, level: number): void {
+    this.player.weaponSlots[slotIndex] = createWeaponInstance(weaponId, level);
   }
 
   equipSlot(index: 0 | 1 | 2): void {

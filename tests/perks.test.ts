@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERK_MAX_RANK } from "../src/constants";
-import { PERKS, getPerkById, rollPerkOffers } from "../src/systems/perks";
+import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/perks";
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
@@ -137,9 +137,9 @@ describe("PERKS", () => {
     expect(player.lightningChainRadius).toBe(240);
   });
 
-  it("wildfire and overload require their prerequisite perk", () => {
-    expect(getPerkById("wildfire")!.requires).toEqual(["ignite"]);
-    expect(getPerkById("overload")!.requires).toEqual(["lightning"]);
+  it("wildfire and overload require Deadly Aura plus their elemental partner (both are inert without Aura)", () => {
+    expect(getPerkById("wildfire")!.requires).toEqual(["aura", "ignite"]);
+    expect(getPerkById("overload")!.requires).toEqual(["aura", "lightning"]);
     expect(getPerkById("stormConduit")!.requires).toEqual(["ignite", "lightning"]);
   });
 });
@@ -167,17 +167,45 @@ describe("rollPerkOffers", () => {
     expect(offers.some((p) => p.id === "stormConduit")).toBe(false);
   });
 
-  it("offers a gated perk once its prerequisites are picked", () => {
+  it("still gates a perk that has only one of its two prerequisites", () => {
     const picked = [{ perk: getPerkById("ignite")!, count: 1 }];
+    const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
+    expect(offers.some((p) => p.id === "wildfire")).toBe(false);
+    expect(offers.some((p) => p.id === "overload")).toBe(false);
+    expect(offers.some((p) => p.id === "stormConduit")).toBe(false);
+  });
+
+  it("offers a gated perk once all of its prerequisites are picked", () => {
+    const picked = [
+      { perk: getPerkById("aura")!, count: 1 },
+      { perk: getPerkById("ignite")!, count: 1 },
+    ];
     const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
     expect(offers.some((p) => p.id === "wildfire")).toBe(true);
     expect(offers.some((p) => p.id === "overload")).toBe(false);
-    expect(offers.some((p) => p.id === "stormConduit")).toBe(false);
   });
 
   it("excludes a perk that's already at max rank", () => {
     const picked = [{ perk: getPerkById("damage")!, count: PERK_MAX_RANK }];
     const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
     expect(offers.some((p) => p.id === "damage")).toBe(false);
+  });
+});
+
+describe("perkTier", () => {
+  it("is 0 for a perk with no prerequisites", () => {
+    expect(perkTier("damage")).toBe(0);
+    expect(perkTier("ignite")).toBe(0);
+    expect(perkTier("lightning")).toBe(0);
+    expect(perkTier("aura")).toBe(0);
+  });
+
+  it("is 1 for a perk with only tier-0 prerequisites", () => {
+    expect(perkTier("stormConduit")).toBe(1); // requires ignite + lightning, both tier 0
+  });
+
+  it("is 1 for wildfire/overload (requires tier-0 aura plus a tier-0 elemental)", () => {
+    expect(perkTier("wildfire")).toBe(1);
+    expect(perkTier("overload")).toBe(1);
   });
 });

@@ -10,13 +10,13 @@ import type { Perk } from "../types";
 //   - Ignite + Chain Lightning: passive, free once you have both — a chain
 //     that arcs into an already-burning enemy deals double damage (see
 //     systems/statusEffects.ts's applyOnHitEffects).
-//   - Wildfire (this pool) needs Ignite to matter: it makes Deadly Aura
-//     also apply the burn, but the burn's own damage/duration numbers still
-//     come from Ignite. Wildfire alone (no Ignite) does nothing.
-//   - Overload (this pool) needs Chain Lightning to matter: it makes Deadly
-//     Aura also arc a lightning hit to the nearest enemy just past its
-//     edge, using Chain Lightning's own damage number. Overload alone does
-//     nothing.
+//   - Wildfire modifies Deadly Aura to also apply the burn, but the burn's
+//     own damage/duration numbers still come from Ignite — it needs BOTH
+//     Aura (something for it to modify) and Ignite (numbers to borrow), so
+//     `requires` gates it on both rather than letting it be offered inert.
+//   - Overload modifies Deadly Aura to also arc a lightning hit to the
+//     nearest enemy just past its edge, using Chain Lightning's own damage
+//     number — same two-prerequisite shape as Wildfire (Aura + Lightning).
 //   - Vampiric (lifesteal) and Berserker (damage scales with missing hp)
 //     pair naturally — Vampiric supplies the sustain that lets you safely
 //     sit in Berserker's low-hp damage window.
@@ -147,9 +147,9 @@ export const PERKS: Perk[] = [
   {
     id: "wildfire",
     name: "Wildfire",
-    description: "Deadly Aura also ignites — requires Ignite",
+    description: "Deadly Aura also ignites — requires Deadly Aura and Ignite",
     icon: '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><polygon points="12,7 14.5,12 17,14 14.5,19 9.5,19 7,14 9.5,12" fill="currentColor"/>',
-    requires: ["ignite"],
+    requires: ["aura", "ignite"],
     apply: (p) => {
       p.auraAppliesIgnite = true;
     },
@@ -157,9 +157,9 @@ export const PERKS: Perk[] = [
   {
     id: "overload",
     name: "Overload",
-    description: "Deadly Aura also arcs lightning — requires Chain Lightning",
+    description: "Deadly Aura also arcs lightning — requires Deadly Aura and Chain Lightning",
     icon: '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><polygon points="13,5 7,13 11,13 10,19 17,11 13,11" fill="currentColor"/>',
-    requires: ["lightning"],
+    requires: ["aura", "lightning"],
     apply: (p) => {
       p.auraTriggersLightning = true;
     },
@@ -189,6 +189,14 @@ export const PERKS: Perk[] = [
 
 export function getPerkById(id: string): Perk | undefined {
   return PERKS.find((p) => p.id === id);
+}
+
+// Dependency depth for display purposes (the Perk Tree screen) — 0 for a
+// perk with no prerequisites, otherwise 1 + the deepest prerequisite's tier.
+export function perkTier(id: string): number {
+  const perk = getPerkById(id);
+  if (!perk || !perk.requires || perk.requires.length === 0) return 0;
+  return 1 + Math.max(...perk.requires.map(perkTier));
 }
 
 // Samples PERK_OFFER_COUNT distinct perks without replacement, excluding any

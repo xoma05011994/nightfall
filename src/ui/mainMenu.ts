@@ -2,6 +2,8 @@ export interface MainMenuHandlers {
   onEndless: () => void;
   onAdventure: () => void;
   onShop: () => void;
+  onSandbox: () => void;
+  onPerkTree: () => void;
 }
 
 export class MainMenu {
@@ -20,12 +22,16 @@ export class MainMenu {
         <button class="overlay-button" data-action="endless">ENDLESS</button>
         <button class="overlay-button" data-action="adventure">ADVENTURE</button>
         <button class="overlay-button" data-action="shop">ARMORY</button>
+        <button class="overlay-button" data-action="sandbox">SANDBOX</button>
+        <button class="overlay-button" data-action="perkTree">PERK TREE</button>
       </div>
     `;
     container.appendChild(this.root);
     this.root.querySelector('[data-action="endless"]')!.addEventListener("click", handlers.onEndless);
     this.root.querySelector('[data-action="adventure"]')!.addEventListener("click", handlers.onAdventure);
     this.root.querySelector('[data-action="shop"]')!.addEventListener("click", handlers.onShop);
+    this.root.querySelector('[data-action="sandbox"]')!.addEventListener("click", handlers.onSandbox);
+    this.root.querySelector('[data-action="perkTree"]')!.addEventListener("click", handlers.onPerkTree);
   }
 
   show(): void {

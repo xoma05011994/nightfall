@@ -31,7 +31,7 @@ describe("Game — weapon pickup prompt", () => {
     expect(callbacks.onWeaponPrompt).toHaveBeenCalledOnce();
   });
 
-  it("declining closes the prompt and does NOT immediately re-open it while still standing on the pickup (regression)", () => {
+  it("declining ('Leave It') removes the pickup from the world instead of leaving it on the ground", () => {
     const { game, callbacks } = makeGame();
     game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
     game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
@@ -42,35 +42,13 @@ describe("Game — weapon pickup prompt", () => {
 
     game.resolveWeaponPrompt(null);
     expect(game.phase).toBe("playing");
+    expect(game.weaponPickups).toHaveLength(0);
 
-    // Player hasn't moved, so they're still standing on the same pickup —
-    // the next frame(s) must not re-trigger the prompt.
+    // Standing in the same spot on the next frame(s) must not re-trigger a
+    // prompt — there's nothing left on the ground to touch.
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 16);
     expect(game.phase).toBe("playing");
     expect(callbacks.onWeaponPrompt).toHaveBeenCalledOnce();
-
-    // The pickup is still in the world for a later change of mind.
-    expect(game.weaponPickups).toHaveLength(1);
-  });
-
-  it("re-prompts for the same pickup after the player walks away and back", () => {
-    const { game, callbacks } = makeGame();
-    game.player.weaponSlots[1] = { weaponId: "shotgun", ammo: 6, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
-    game.player.weaponSlots[2] = { weaponId: "assaultRifle", ammo: 30, fireTimerMs: 0, reloading: false, reloadTimerMs: 0, level: 1 };
-    game.weaponPickups.push({ id: 1, position: { x: 0, y: 0 }, weaponId: "rpg", radius: 16 });
-    game.player.position = { x: 0, y: 0 };
-
-    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
-    game.resolveWeaponPrompt(null);
-
-    // Walk far away, then back onto the same pickup.
-    game.player.position = { x: 5000, y: 5000 };
-    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 16);
-    game.player.position = { x: 0, y: 0 };
-    game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 32);
-
-    expect(game.phase).toBe("weaponPrompt");
-    expect(callbacks.onWeaponPrompt).toHaveBeenCalledTimes(2);
   });
 
   it("accepting a slot replacement removes the pickup and equips the new weapon", () => {
@@ -349,5 +327,104 @@ describe("Game — weapon upgrades from the meta-progression shop", () => {
     game.applyPerk(getPerkById("damage")!); // *1.25
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, true, 0);
     expect(game.projectiles[0]!.damage).toBeCloseTo(WEAPON_DEFS.pistol.damage * 1.1 * 1.25, 5);
+  });
+});
+
+describe("Game — pause", () => {
+  it("pause() freezes the sim (update becomes a no-op) and resume() unfreezes it", () => {
+    const { game } = makeGame();
+    game.pause();
+    expect(game.phase).toBe("paused");
+
+    const elapsedBefore = game.elapsedMs;
+    game.update(1, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    expect(game.elapsedMs).toBe(elapsedBefore); // update() returned early
+
+    game.resume();
+    expect(game.phase).toBe("playing");
+    game.update(1, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    expect(game.elapsedMs).toBeGreaterThan(elapsedBefore);
+  });
+
+  it("pause() only takes effect from the playing phase", () => {
+    // Seed chosen empirically to land a perk-reward chest, which opens the
+    // levelup phase — confirm pause() is a no-op there.
+    for (let seed = 1; seed <= 50; seed++) {
+      const { game } = makeGame(seed);
+      game.chests.push({ id: 1, position: { ...game.player.position }, radius: 18 });
+      game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+      if (game.phase === "levelup") {
+        game.pause();
+        expect(game.phase).toBe("levelup");
+        return;
+      }
+    }
+    throw new Error("no seed landed a levelup-phase chest in range");
+  });
+
+  it("resume() only takes effect from the paused phase", () => {
+    const { game } = makeGame();
+    game.resume();
+    expect(game.phase).toBe("playing");
+  });
+
+  it("leaveToMenu() parks the game in the start phase, halting the sim", () => {
+    const { game } = makeGame();
+    game.pause();
+    game.leaveToMenu();
+    expect(game.phase).toBe("start");
+    const elapsedBefore = game.elapsedMs;
+    game.update(1, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+    expect(game.elapsedMs).toBe(elapsedBefore);
+  });
+});
+
+describe("Game — sandbox mode", () => {
+  it("never spawns enemies/chests on its own and never triggers gameover", () => {
+    const { game, callbacks } = makeGame(1, "sandbox");
+    game.player.hp = 1;
+    for (let i = 0; i < 200; i++) {
+      game.update(1, { x: 0, y: 0 }, { x: 1, y: 0 }, false, i * 1000);
+    }
+    expect(game.enemies).toHaveLength(0);
+    expect(game.chests).toHaveLength(0);
+    expect(game.phase).toBe("playing");
+    expect(callbacks.onGameOver).not.toHaveBeenCalled();
+  });
+
+  it("sandboxSpawnEnemy adds the requested type near the player", () => {
+    const { game } = makeGame(1, "sandbox");
+    game.sandboxSpawnEnemy("brute");
+    expect(game.enemies).toHaveLength(1);
+    expect(game.enemies[0]!.type).toBe("brute");
+  });
+
+  it("sandboxSpawnEnemy can spawn a boss", () => {
+    const { game } = makeGame(1, "sandbox");
+    game.sandboxSpawnEnemy("boss");
+    expect(game.enemies[0]!.isBoss).toBe(true);
+  });
+
+  it("sandboxClearEnemies empties the enemy list", () => {
+    const { game } = makeGame(1, "sandbox");
+    game.sandboxSpawnEnemy("grunt");
+    game.sandboxSpawnEnemy("grunt");
+    game.sandboxClearEnemies();
+    expect(game.enemies).toHaveLength(0);
+  });
+
+  it("sandboxApplyPerk applies immediately without going through the level-up flow", () => {
+    const { game, callbacks } = makeGame(1, "sandbox");
+    game.sandboxApplyPerk(getPerkById("damage")!);
+    expect(game.player.damageMultiplier).toBeCloseTo(1.25, 5);
+    expect(game.phase).toBe("playing");
+    expect(callbacks.onLevelUp).not.toHaveBeenCalled();
+  });
+
+  it("sandboxEquipWeapon equips directly into the given slot at the given level", () => {
+    const { game } = makeGame(1, "sandbox");
+    game.sandboxEquipWeapon(1, "rpg", 7);
+    expect(game.player.weaponSlots[1]?.weaponId).toBe("rpg");
+    expect(game.player.weaponSlots[1]?.level).toBe(7);
   });
 });

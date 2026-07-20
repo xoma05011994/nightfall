@@ -32,6 +32,7 @@ const CONE_EFFECT_LIFETIME_MS = 100;
 const LIGHTNING_EFFECT_LIFETIME_MS = 200;
 const LIGHTNING_SEGMENTS = 6;
 const LIGHTNING_JITTER = 14;
+const WEAPON_ICON_WORLD_SCALE = 3.5;
 
 // Simple deterministic hash-based PRNG so a bolt's zigzag stays stable across
 // frames while it fades, without needing to store per-segment jitter values.
@@ -413,7 +414,7 @@ export class Renderer {
       ctx.translate(pickup.position.x, pickup.position.y);
       ctx.shadowColor = def.color;
       ctx.shadowBlur = 14;
-      drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse, def.color);
+      drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse * WEAPON_ICON_WORLD_SCALE, def.color);
       ctx.restore();
     }
   }
