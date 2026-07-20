@@ -1,52 +1,6 @@
-import { PROJECTILE_RADIUS, PROJECTILE_SPEED, PROJECTILE_SPREAD_RAD, PROJECTILE_TTL_MS } from "../constants";
-import { directionTo, distanceSq, rotate } from "../math";
+import { directionTo } from "../math";
 import type { Enemy, Player, Projectile } from "../types";
 import { circlesOverlap } from "./collision";
-
-export function findNearestEnemy(playerPos: Player["position"], enemies: Enemy[], maxRange: number): Enemy | null {
-  let nearest: Enemy | null = null;
-  let nearestDistSq = maxRange * maxRange;
-  for (const enemy of enemies) {
-    const dSq = distanceSq(playerPos, enemy.position);
-    if (dSq <= nearestDistSq) {
-      nearest = enemy;
-      nearestDistSq = dSq;
-    }
-  }
-  return nearest;
-}
-
-// Fully automatic weapon: no manual aim input exists, the player always
-// fires at whatever's nearest once their cooldown is ready. Returns the
-// next free projectile id (callers thread this through to keep ids unique
-// without a module-level counter, which would make this harder to test).
-export function stepPlayerAttack(player: Player, enemies: Enemy[], projectiles: Projectile[], dt: number, nextProjectileId: number): number {
-  player.attackTimerMs -= dt * 1000;
-  if (player.attackTimerMs > 0) return nextProjectileId;
-
-  const target = findNearestEnemy(player.position, enemies, player.attackRange);
-  if (!target) return nextProjectileId;
-
-  player.attackTimerMs = player.attackCooldownMs;
-  const baseDir = directionTo(player.position, target.position);
-  const count = player.projectileCount;
-  let id = nextProjectileId;
-  for (let i = 0; i < count; i++) {
-    // Odd shot counts fire one straight down the middle; even counts fan
-    // out symmetrically around it.
-    const offset = i - (count - 1) / 2;
-    const dir = rotate(baseDir, offset * PROJECTILE_SPREAD_RAD);
-    projectiles.push({
-      id: id++,
-      position: { x: player.position.x, y: player.position.y },
-      velocity: { x: dir.x * PROJECTILE_SPEED, y: dir.y * PROJECTILE_SPEED },
-      damage: player.damage,
-      radius: PROJECTILE_RADIUS,
-      ttlMs: PROJECTILE_TTL_MS,
-    });
-  }
-  return id;
-}
 
 export function stepProjectiles(projectiles: Projectile[], dt: number): Projectile[] {
   const alive: Projectile[] = [];
@@ -59,10 +13,25 @@ export function stepProjectiles(projectiles: Projectile[], dt: number): Projecti
   return alive;
 }
 
-// Single-target hit per projectile (no pierce for v0.1). Returns enemies
-// that died this step so the caller can drop XP orbs for them.
+// Removes dead (hp <= 0) enemies from `enemies` in place and returns them —
+// shared by projectile hits and the instant-hit beam/cone fire modes, which
+// apply damage directly to enemy.hp without a Projectile entity.
+export function collectDeadEnemies(enemies: Enemy[]): Enemy[] {
+  const dead: Enemy[] = [];
+  const alive: Enemy[] = [];
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) dead.push(enemy);
+    else alive.push(enemy);
+  }
+  enemies.length = 0;
+  enemies.push(...alive);
+  return dead;
+}
+
+// Single-target hit per projectile, except splash weapons (RPG) which also
+// damage every other enemy within splashRadius of the impact point. Returns
+// enemies that died this step so the caller can drop XP/loot for them.
 export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[]): { survivingProjectiles: Projectile[]; deadEnemies: Enemy[] } {
-  const deadEnemies: Enemy[] = [];
   const survivingProjectiles: Projectile[] = [];
 
   for (const projectile of projectiles) {
@@ -72,17 +41,21 @@ export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[
       if (circlesOverlap(projectile.position, projectile.radius, enemy.position, enemy.radius)) {
         enemy.hp -= projectile.damage;
         hit = true;
-        if (enemy.hp <= 0) deadEnemies.push(enemy);
+        if (projectile.splashRadius && projectile.splashDamage) {
+          for (const other of enemies) {
+            if (other === enemy || other.hp <= 0) continue;
+            if (circlesOverlap(projectile.position, projectile.splashRadius, other.position, other.radius)) {
+              other.hp -= projectile.splashDamage;
+            }
+          }
+        }
         break;
       }
     }
     if (!hit) survivingProjectiles.push(projectile);
   }
 
-  const survivingEnemies = enemies.filter((e) => e.hp > 0);
-  enemies.length = 0;
-  enemies.push(...survivingEnemies);
-
+  const deadEnemies = collectDeadEnemies(enemies);
   return { survivingProjectiles, deadEnemies };
 }
 

@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERKS, getPerkById, rollPerkOffers } from "../src/systems/perks";
-import { xpToNextForLevel } from "../src/systems/xp";
-import type { Player } from "../src/types";
-
-function makePlayer(): Player {
-  return {
-    position: { x: 0, y: 0 },
-    hp: 100,
-    maxHp: 100,
-    level: 1,
-    xp: 0,
-    xpToNext: xpToNextForLevel(1),
-    moveSpeed: 200,
-    damage: 10,
-    attackCooldownMs: 500,
-    attackTimerMs: 0,
-    attackRange: 200,
-    projectileCount: 1,
-    radius: 14,
-    pickupRadius: 90,
-  };
-}
+import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
   it("has exactly 5 perks with unique ids", () => {
@@ -28,16 +8,16 @@ describe("PERKS", () => {
     expect(new Set(PERKS.map((p) => p.id)).size).toBe(5);
   });
 
-  it("damage perk increases damage by 25%", () => {
+  it("damage perk multiplies damageMultiplier by 1.25", () => {
     const player = makePlayer();
     getPerkById("damage")!.apply(player);
-    expect(player.damage).toBeCloseTo(12.5, 5);
+    expect(player.damageMultiplier).toBeCloseTo(1.25, 5);
   });
 
-  it("firerate perk reduces attack cooldown by 20%", () => {
+  it("firerate perk multiplies attackCooldownMultiplier by 0.8", () => {
     const player = makePlayer();
     getPerkById("firerate")!.apply(player);
-    expect(player.attackCooldownMs).toBeCloseTo(400, 5);
+    expect(player.attackCooldownMultiplier).toBeCloseTo(0.8, 5);
   });
 
   it("maxhp perk increases both max hp and current hp by 20", () => {
@@ -54,10 +34,17 @@ describe("PERKS", () => {
     expect(player.moveSpeed).toBeCloseTo(230, 5);
   });
 
-  it("multishot perk adds one projectile", () => {
+  it("multishot perk adds one extra projectile", () => {
     const player = makePlayer();
     getPerkById("multishot")!.apply(player);
-    expect(player.projectileCount).toBe(2);
+    expect(player.extraProjectiles).toBe(1);
+  });
+
+  it("perks stack multiplicatively when applied repeatedly", () => {
+    const player = makePlayer();
+    getPerkById("damage")!.apply(player);
+    getPerkById("damage")!.apply(player);
+    expect(player.damageMultiplier).toBeCloseTo(1.5625, 5);
   });
 });
 

@@ -28,6 +28,21 @@ export function directionTo(from: Vec2, to: Vec2): Vec2 {
   return normalize({ x: to.x - from.x, y: to.y - from.y });
 }
 
+export function dot(a: Vec2, b: Vec2): number {
+  return a.x * b.x + a.y * b.y;
+}
+
+// Distance from `point` to the segment from `origin` extending `dir`
+// (normalized) for `length` units — null if the point's projection falls
+// outside the segment (behind the origin or past its end).
+export function pointToRaySegmentDistance(point: Vec2, origin: Vec2, dir: Vec2, length: number): number | null {
+  const toPoint = { x: point.x - origin.x, y: point.y - origin.y };
+  const t = dot(toPoint, dir);
+  if (t < 0 || t > length) return null;
+  const closest = { x: origin.x + dir.x * t, y: origin.y + dir.y * t };
+  return distance(point, closest);
+}
+
 export function rotate(v: Vec2, angleRad: number): Vec2 {
   const cos = Math.cos(angleRad);
   const sin = Math.sin(angleRad);

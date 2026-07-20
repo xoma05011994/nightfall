@@ -1,11 +1,14 @@
 import "./ui/style.css";
 import { Renderer } from "./render/renderer";
-import { Hud } from "./ui/hud";
+import { Hud, type HudWeaponSlot } from "./ui/hud";
 import { StartScreen } from "./ui/startScreen";
 import { PerkModal } from "./ui/perkModal";
 import { GameOverScreen } from "./ui/gameOverScreen";
+import { WeaponPromptModal } from "./ui/weaponPromptModal";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
+import { WEAPON_DEFS } from "./systems/weapons";
+import { normalize } from "./math";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root")!;
@@ -14,6 +17,7 @@ const renderer = new Renderer(canvas);
 const input = new InputManager();
 const hud = new Hud(uiRoot);
 const perkModal = new PerkModal(uiRoot);
+const weaponPromptModal = new WeaponPromptModal(uiRoot);
 const gameOverScreen = new GameOverScreen(uiRoot, () => {
   gameOverScreen.hide();
   game.start();
@@ -25,6 +29,20 @@ const game = new Game({
     perkModal.show(offers, (perk) => {
       game.applyPerk(perk);
     });
+  },
+  onWeaponPrompt: (info) => {
+    const slot2 = game.player.weaponSlots[1];
+    const slot3 = game.player.weaponSlots[2];
+    weaponPromptModal.show(
+      {
+        incomingName: WEAPON_DEFS[info.weaponId].name,
+        slot2Name: slot2 ? WEAPON_DEFS[slot2.weaponId].name : "—",
+        slot3Name: slot3 ? WEAPON_DEFS[slot3.weaponId].name : "—",
+      },
+      (choice) => {
+        game.resolveWeaponPrompt(choice);
+      },
+    );
   },
   onGameOver: () => {
     hud.setVisible(false);
@@ -41,7 +59,18 @@ const startScreen = new StartScreen(uiRoot, () => {
 hud.setVisible(false);
 
 function renderNow(): void {
-  renderer.render(game.player.position, game.player, game.enemies, game.projectiles, game.xpOrbs, performance.now());
+  renderer.render(
+    {
+      player: game.player,
+      enemies: game.enemies,
+      projectiles: game.projectiles,
+      xpOrbs: game.xpOrbs,
+      weaponPickups: game.weaponPickups,
+      beamEffects: game.beamEffects,
+      coneEffects: game.coneEffects,
+    },
+    performance.now(),
+  );
 }
 
 function resize(): void {
@@ -67,9 +96,26 @@ function frame(now: number): void {
   lastTime = now;
 
   const moveVector = input.getMoveVector();
-  game.update(dt, moveVector);
+  const mousePos = input.getMouseScreenPos();
+  const aimDir = normalize({ x: mousePos.x - renderer.viewWidth / 2, y: mousePos.y - renderer.viewHeight / 2 });
+  const fireHeld = input.isFireHeld();
 
-  if (game.phase === "playing" || game.phase === "levelup") {
+  if (input.consumeJustPressed("Digit1")) game.equipSlot(0);
+  if (input.consumeJustPressed("Digit2")) game.equipSlot(1);
+  if (input.consumeJustPressed("Digit3")) game.equipSlot(2);
+  if (input.consumeJustPressed("KeyR")) game.reloadEquipped();
+
+  game.update(dt, moveVector, aimDir, fireHeld, now);
+
+  if (game.phase === "playing" || game.phase === "levelup" || game.phase === "weaponPrompt") {
+    const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
+      const slot = game.player.weaponSlots[i as 0 | 1 | 2];
+      return { name: slot ? WEAPON_DEFS[slot.weaponId].name : null, equipped: game.player.equippedSlot === i };
+    }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+
+    const equipped = game.player.weaponSlots[game.player.equippedSlot];
+    const equippedDef = equipped ? WEAPON_DEFS[equipped.weaponId] : null;
+
     hud.update({
       hp: game.player.hp,
       maxHp: game.player.maxHp,
@@ -78,10 +124,26 @@ function frame(now: number): void {
       level: game.player.level,
       elapsedMs: game.elapsedMs,
       kills: game.kills,
+      slots,
+      ammo: equipped?.ammo ?? 0,
+      magazineSize: equippedDef?.magazineSize ?? 1,
+      reloading: equipped?.reloading ?? false,
+      reloadRatio: equipped && equippedDef ? equipped.reloadTimerMs / equippedDef.reloadMs : 0,
     });
   }
 
-  renderer.render(game.player.position, game.player, game.enemies, game.projectiles, game.xpOrbs, now);
+  renderer.render(
+    {
+      player: game.player,
+      enemies: game.enemies,
+      projectiles: game.projectiles,
+      xpOrbs: game.xpOrbs,
+      weaponPickups: game.weaponPickups,
+      beamEffects: game.beamEffects,
+      coneEffects: game.coneEffects,
+    },
+    now,
+  );
 
   requestAnimationFrame(frame);
 }

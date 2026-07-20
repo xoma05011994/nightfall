@@ -1,24 +1,26 @@
 import { PERK_OFFER_COUNT } from "../constants";
 import type { Perk } from "../types";
 
-// v0.1: exactly 5 perks, each a flat one-time multiplier/bonus. No stacking
-// caps or prerequisites yet — every perk can be picked repeatedly across a
-// run if it's re-offered.
+// v0.2: perks are player-level multipliers/bonuses applied on top of
+// whichever weapon is equipped (damage/fire-rate/extra-projectiles), rather
+// than being specific to a single weapon — so they stay relevant no matter
+// what's picked up mid-run. No stacking caps or prerequisites yet — every
+// perk can be picked repeatedly across a run if it's re-offered.
 export const PERKS: Perk[] = [
   {
     id: "damage",
     name: "Blood Rage",
     description: "+25% weapon damage",
     apply: (p) => {
-      p.damage *= 1.25;
+      p.damageMultiplier *= 1.25;
     },
   },
   {
     id: "firerate",
     name: "Frenzy",
-    description: "-20% attack cooldown",
+    description: "-20% weapon cooldown",
     apply: (p) => {
-      p.attackCooldownMs *= 0.8;
+      p.attackCooldownMultiplier *= 0.8;
     },
   },
   {
@@ -41,9 +43,9 @@ export const PERKS: Perk[] = [
   {
     id: "multishot",
     name: "Split Shot",
-    description: "+1 projectile per attack",
+    description: "+1 projectile per shot (multi-projectile weapons)",
     apply: (p) => {
-      p.projectileCount += 1;
+      p.extraProjectiles += 1;
     },
   },
 ];

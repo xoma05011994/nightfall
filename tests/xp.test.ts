@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { grantXp, xpToNextForLevel } from "../src/systems/xp";
-import type { Player } from "../src/types";
-
-function makePlayer(overrides: Partial<Player> = {}): Player {
-  return {
-    position: { x: 0, y: 0 },
-    hp: 100,
-    maxHp: 100,
-    level: 1,
-    xp: 0,
-    xpToNext: xpToNextForLevel(1),
-    moveSpeed: 200,
-    damage: 10,
-    attackCooldownMs: 500,
-    attackTimerMs: 0,
-    attackRange: 200,
-    projectileCount: 1,
-    radius: 14,
-    pickupRadius: 90,
-    ...overrides,
-  };
-}
+import { makePlayer } from "./testHelpers";
 
 describe("xpToNextForLevel", () => {
   it("increases monotonically with level", () => {

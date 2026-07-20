@@ -1,3 +1,8 @@
+export interface HudWeaponSlot {
+  name: string | null;
+  equipped: boolean;
+}
+
 export interface HudData {
   hp: number;
   maxHp: number;
@@ -6,6 +11,11 @@ export interface HudData {
   level: number;
   elapsedMs: number;
   kills: number;
+  slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+  ammo: number;
+  magazineSize: number;
+  reloading: boolean;
+  reloadRatio: number; // 0..1, fraction of reload remaining
 }
 
 function formatTime(ms: number): string {
@@ -24,6 +34,9 @@ export class Hud {
   private levelEl: HTMLDivElement;
   private timerEl: HTMLDivElement;
   private killsEl: HTMLDivElement;
+  private slotEls: HTMLDivElement[];
+  private ammoTextEl: HTMLDivElement;
+  private ammoBarFill: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement("div");
@@ -40,6 +53,15 @@ export class Hud {
         <div class="hud-timer">00:00</div>
         <div class="hud-kills">Kills: 0</div>
       </div>
+      <div class="hud-bottom-center">
+        <div class="hud-weapon-slots">
+          <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><span class="weapon-slot-name">Sidearm</span></div>
+          <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><span class="weapon-slot-name">—</span></div>
+          <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><span class="weapon-slot-name">—</span></div>
+        </div>
+        <div class="hud-ammo-track"><div class="hud-ammo-fill" style="width:100%"></div></div>
+        <div class="hud-ammo-text">10 / 10</div>
+      </div>
     `;
     container.appendChild(this.root);
 
@@ -48,6 +70,9 @@ export class Hud {
     this.levelEl = this.root.querySelector(".hud-level")!;
     this.timerEl = this.root.querySelector(".hud-timer")!;
     this.killsEl = this.root.querySelector(".hud-kills")!;
+    this.slotEls = Array.from(this.root.querySelectorAll(".weapon-slot"));
+    this.ammoTextEl = this.root.querySelector(".hud-ammo-text")!;
+    this.ammoBarFill = this.root.querySelector(".hud-ammo-fill")!;
   }
 
   setVisible(visible: boolean): void {
@@ -60,5 +85,24 @@ export class Hud {
     this.levelEl.textContent = `LV ${data.level}`;
     this.timerEl.textContent = formatTime(data.elapsedMs);
     this.killsEl.textContent = `Kills: ${data.kills}`;
+
+    data.slots.forEach((slot, i) => {
+      const el = this.slotEls[i];
+      if (!el) return;
+      el.classList.toggle("equipped", slot.equipped);
+      el.classList.toggle("empty", slot.name === null);
+      const nameEl = el.querySelector(".weapon-slot-name");
+      if (nameEl) nameEl.textContent = slot.name ?? "—";
+    });
+
+    if (data.reloading) {
+      this.ammoTextEl.textContent = "RELOADING…";
+      this.ammoBarFill.style.width = `${(1 - data.reloadRatio) * 100}%`;
+      this.ammoBarFill.classList.add("reloading");
+    } else {
+      this.ammoTextEl.textContent = `${data.ammo} / ${data.magazineSize}`;
+      this.ammoBarFill.style.width = `${(data.ammo / data.magazineSize) * 100}%`;
+      this.ammoBarFill.classList.remove("reloading");
+    }
   }
 }
