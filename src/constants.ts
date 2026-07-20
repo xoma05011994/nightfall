@@ -38,3 +38,35 @@ export const FENCE_POST_SPACING = 70;
 // 5 pickup-only weapons (uniformly chosen among them).
 export const WEAPON_DROP_CHANCE = 0.06;
 export const WEAPON_PICKUP_RADIUS = 16;
+
+// v0.3 — ignite (burn DoT) and deadly aura perks tick on a fixed interval
+// rather than every frame, so their damage rate is easy to reason about
+// independent of framerate.
+export const IGNITE_TICK_MS = 500;
+export const AURA_TICK_MS = 400;
+
+// v0.3 — chests. Time-based (not kill-based like weapon drops) so they give
+// a different, explore-for-it rhythm; spawn on the same off-screen ring as
+// enemies so reaching one takes a deliberate detour.
+export const CHEST_SPAWN_INTERVAL_MS = 45_000;
+export const CHEST_RADIUS = 18;
+export const CHEST_GOLD_MIN = 20;
+export const CHEST_GOLD_MAX = 40;
+export const CHEST_XP_AMOUNT = 40;
+
+// v0.3 — boss enemies. Big flat HP/damage pool rather than the ×scale curve
+// grunts use, so a boss fight reads as a distinct set-piece rather than
+// "a grunt that happens to be tanky". Slower than grunts on purpose: the
+// threat is attrition/damage, not being run down.
+export const BOSS_BASE_HP = 600;
+export const BOSS_BASE_DAMAGE = 20;
+export const BOSS_RADIUS = 34;
+export const BOSS_SPEED = 70;
+export const BOSS_CONTACT_COOLDOWN_MS = 900;
+
+// v0.3 — Adventure mode: fixed-length levels won by surviving the clock,
+// with a boss arriving at each milestone (the 6-minute one coincides with
+// the win condition itself — reaching it means the run is complete).
+export const ADVENTURE_DURATION_MS = 6 * 60_000;
+export const ADVENTURE_BOSS_1_TRIGGER_MS = 3 * 60_000;
+export const ADVENTURE_BOSS_2_TRIGGER_MS = ADVENTURE_DURATION_MS;

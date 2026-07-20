@@ -1,6 +1,6 @@
 # Nightfall (survivor-2d)
 
-2D top-down survival roguelite — v0.2. Single-player, no backend.
+2D top-down survival roguelite — v0.3. Single-player, no backend.
 
 ## Dev workflow
 
@@ -31,39 +31,67 @@ npm run build         # typecheck + production build
   time; their stats scale gently with elapsed run time. Any kill has a small
   chance to drop one of the 5 pickup weapons.
 - Kills also drop XP orbs that fly toward the player once in pickup range.
-  Leveling up offers a choice of 3 perks (from a pool of 5) — these are
-  player-level multipliers (damage/fire-rate/extra-projectiles) that apply
-  on top of whichever weapon is equipped.
-- Death ends the run and shows survival time / level / kill count; restart
-  starts a fresh run (no meta-progression yet).
+  Leveling up offers a choice of 3 perks from a pool of 9: the original 5
+  (damage/fire-rate/max-hp/move-speed/extra-projectile) plus 4 with their own
+  mechanics — **Pierce** (projectiles punch through an extra enemy),
+  **Ignite** (hits apply a burn damage-over-time), **Chain Lightning** (hits
+  arc bonus damage to the nearest other enemy), **Deadly Aura** (continuous
+  radius damage around the player, independent of the equipped weapon).
+  Perks picked this run are listed in a tray on the left side of the HUD.
+- Chests spawn periodically (a different rhythm from weapon drops, which are
+  kill-triggered) — walking onto one grants gold, a chunk of XP, or a perk
+  choice, chosen at random.
+- Two game modes, picked from the main menu:
+  - **Endless** — the original open-ended survive-as-long-as-you-can loop.
+  - **Adventure** — pick 1 of 10 pre-generated levels (each a fixed RNG seed,
+    so a level plays out identically on repeat attempts, plus its own dark
+    color palette). Survive 6 minutes to win; a boss enemy arrives at the
+    3:00 and 6:00 marks. Completing a level's gold banks into a persistent
+    profile (`localStorage`); Endless gold is a per-run stat only, never
+    saved.
+  - The Armory (from the main menu) spends banked gold on permanent
+    per-weapon damage upgrades (+10%/level, up to 5 levels) — these only
+    apply in Adventure mode, never Endless.
 - The play area is bounded by a perimeter fence — no infinite wandering.
-  Dark/blood/bone visual palette (lightened slightly from v0.1's near-black),
-  Canvas2D rendering, camera follows the player without ever rotating.
+  Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
+  rendering, camera follows the player without ever rotating.
 
 ## Structure
 
 - `src/types.ts`, `src/constants.ts`, `src/math.ts` — shared types, tuning
   values, and vector/geometry helpers.
 - `src/systems/` — pure, unit-tested game logic: collision, combat
-  (projectile movement/hits/splash, enemy movement/contact damage),
+  (projectile movement/hits/splash/pierce, enemy movement/contact damage),
   `weapons.ts` (weapon defs + fire modes + ammo/reload), `weaponDrops.ts`
-  (drop rolling + pickup detection), `world.ts` (bounds clamping), spawner,
-  xp/leveling, perks.
+  (drop rolling + pickup detection), `chests.ts` (reward rolling + pickup
+  detection), `statusEffects.ts` (ignite/lightning-chain/aura),
+  `world.ts` (bounds clamping), `levels.ts` (the 10 pre-generated Adventure
+  levels), `profile.ts` (persisted coins/weapon-upgrades), spawner
+  (grunts + bosses), xp/leveling, perks.
 - `src/game/Game.ts` — orchestrates the systems into one
   `update(dt, moveVector, aimDir, fireHeld, nowMs)` per frame, plus discrete
   actions (`equipSlot`, `reloadEquipped`, `applyPerk`, `resolveWeaponPrompt`).
+  `start(mode, levelDef?, weaponUpgrades?)` resets a run; Adventure mode
+  reseeds the RNG from the level's own seed.
 - `src/render/renderer.ts` — Canvas2D world rendering (ground texture, fence,
-  entities, weapon pickups, beam/cone effects, vignette). No DOM.
-- `src/ui/` — DOM overlay: HUD (health/xp/timer/weapon slots/ammo), start
-  screen, level-up perk modal, weapon-pickup slot-choice modal, game-over
-  screen.
-- `tests/` — vitest unit tests for the `systems/` modules.
+  entities, chests, weapon pickups, beam/cone/aura effects, vignette,
+  per-level color palette). No DOM.
+- `src/ui/` — DOM overlay: HUD (health/xp/timer/weapon slots/ammo/gold),
+  perk tray, main menu, level-select screen, armory (shop) screen, level-up
+  perk modal, weapon-pickup slot-choice modal, results screen (win or lose).
+- `tests/` — vitest unit tests for the `systems/` modules and `Game`'s
+  orchestration logic (weapon pickups, chests, adventure timing, weapon
+  upgrades, level seeding).
 
-## Known gaps (accepted for v0.2)
+## Known gaps (accepted for v0.3)
 
 - No sound.
-- No meta-progression/persistence between runs.
-- Weapon balance (damage/fire-rate/magazine/reload numbers) is a first pass,
-  not tuned.
+- Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade
+  magnitudes) is a first pass, not tuned.
+- The 10 Adventure levels differ by seed and color palette, not by distinct
+  geometry — the arena shape/size is the same bounded fenced square for all
+  of them.
 - Ground texture is a fixed field of pre-generated splatters, not a fully
-  procedural world (though the play area is now bounded anyway).
+  procedural world (though the play area is bounded anyway).
+- Player identity/profile has no cloud sync — `localStorage` only, tied to
+  one browser.

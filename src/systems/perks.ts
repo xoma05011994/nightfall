@@ -48,6 +48,41 @@ export const PERKS: Perk[] = [
       p.extraProjectiles += 1;
     },
   },
+  {
+    id: "pierce",
+    name: "Impaler",
+    description: "Projectiles pierce through 1 extra enemy",
+    apply: (p) => {
+      p.pierce += 1;
+    },
+  },
+  {
+    id: "ignite",
+    name: "Ignite",
+    description: "Hits set enemies ablaze for damage over time",
+    apply: (p) => {
+      p.igniteDamagePerTick += 4;
+      p.igniteDurationMs = 3000;
+    },
+  },
+  {
+    id: "lightning",
+    name: "Chain Lightning",
+    description: "Hits arc to the nearest other enemy for bonus damage",
+    apply: (p) => {
+      p.lightningChainDamage += 10;
+      p.lightningChainRadius = 180;
+    },
+  },
+  {
+    id: "aura",
+    name: "Deadly Aura",
+    description: "Continuously damages enemies close to you",
+    apply: (p) => {
+      p.auraDamagePerTick += 6;
+      p.auraRadius = Math.max(p.auraRadius, 110);
+    },
+  },
 ];
 
 export function getPerkById(id: string): Perk | undefined {

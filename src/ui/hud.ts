@@ -11,6 +11,7 @@ export interface HudData {
   level: number;
   elapsedMs: number;
   kills: number;
+  gold: number;
   slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
   ammo: number;
   magazineSize: number;
@@ -34,6 +35,7 @@ export class Hud {
   private levelEl: HTMLDivElement;
   private timerEl: HTMLDivElement;
   private killsEl: HTMLDivElement;
+  private goldEl: HTMLDivElement;
   private slotEls: HTMLDivElement[];
   private ammoTextEl: HTMLDivElement;
   private ammoBarFill: HTMLDivElement;
@@ -52,6 +54,7 @@ export class Hud {
       <div class="hud-top-right">
         <div class="hud-timer">00:00</div>
         <div class="hud-kills">Kills: 0</div>
+        <div class="hud-gold">Gold: 0</div>
       </div>
       <div class="hud-bottom-center">
         <div class="hud-weapon-slots">
@@ -70,6 +73,7 @@ export class Hud {
     this.levelEl = this.root.querySelector(".hud-level")!;
     this.timerEl = this.root.querySelector(".hud-timer")!;
     this.killsEl = this.root.querySelector(".hud-kills")!;
+    this.goldEl = this.root.querySelector(".hud-gold")!;
     this.slotEls = Array.from(this.root.querySelectorAll(".weapon-slot"));
     this.ammoTextEl = this.root.querySelector(".hud-ammo-text")!;
     this.ammoBarFill = this.root.querySelector(".hud-ammo-fill")!;
@@ -85,6 +89,7 @@ export class Hud {
     this.levelEl.textContent = `LV ${data.level}`;
     this.timerEl.textContent = formatTime(data.elapsedMs);
     this.killsEl.textContent = `Kills: ${data.kills}`;
+    this.goldEl.textContent = `Gold: ${data.gold}`;
 
     data.slots.forEach((slot, i) => {
       const el = this.slotEls[i];

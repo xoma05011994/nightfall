@@ -1,6 +1,8 @@
 import { FENCE_POST_SPACING, WORLD_HALF_SIZE } from "../constants";
 import { WEAPON_DEFS } from "../systems/weapons";
-import type { BeamEffect, ConeEffect, Enemy, Player, Projectile, Vec2, WeaponPickup, XpOrb } from "../types";
+import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, Player, Projectile, Vec2, WeaponPickup, XpOrb } from "../types";
+
+const DEFAULT_PALETTE: LevelPalette = { bg: "#1c1310", splatterRGB: "139, 0, 0", fence: "#3a2416" };
 
 interface Splatter {
   position: Vec2;
@@ -14,6 +16,7 @@ export interface RenderState {
   projectiles: Projectile[];
   xpOrbs: XpOrb[];
   weaponPickups: WeaponPickup[];
+  chests: Chest[];
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
 }
@@ -44,11 +47,16 @@ function generateSplatters(): Splatter[] {
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private splatters = generateSplatters();
+  private palette: LevelPalette = DEFAULT_PALETTE;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D canvas context unavailable");
     this.ctx = ctx;
+  }
+
+  setPalette(palette: LevelPalette | null): void {
+    this.palette = palette ?? DEFAULT_PALETTE;
   }
 
   resize(width: number, height: number): void {
@@ -74,7 +82,7 @@ export class Renderer {
     const h = this.viewHeight;
     const camera = state.player.position;
 
-    ctx.fillStyle = "#1c1310";
+    ctx.fillStyle = this.palette.bg;
     ctx.fillRect(0, 0, w, h);
 
     ctx.save();
@@ -83,11 +91,13 @@ export class Renderer {
     this.drawSplatters(camera, w, h);
     this.drawFence(camera, w, h);
     this.drawConeEffects(state.coneEffects, nowMs);
+    this.drawChests(state.chests, nowMs);
     this.drawWeaponPickups(state.weaponPickups, nowMs);
     this.drawOrbs(state.xpOrbs, nowMs);
-    this.drawEnemies(state.enemies);
+    this.drawEnemies(state.enemies, nowMs);
     this.drawBeamEffects(state.beamEffects, nowMs);
     this.drawProjectiles(state.projectiles);
+    this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, nowMs);
 
     ctx.restore();
@@ -106,7 +116,7 @@ export class Renderer {
     for (const s of this.splatters) {
       if (!this.inView(s.position.x, s.position.y, camera, w, h, 60)) continue;
       ctx.beginPath();
-      ctx.fillStyle = `rgba(139, 0, 0, ${s.alpha})`;
+      ctx.fillStyle = `rgba(${this.palette.splatterRGB}, ${s.alpha})`;
       ctx.ellipse(s.position.x, s.position.y, s.radius, s.radius * 0.7, 0, 0, Math.PI * 2);
       ctx.fill();
     }
@@ -117,7 +127,7 @@ export class Renderer {
     const half = WORLD_HALF_SIZE;
 
     ctx.save();
-    ctx.strokeStyle = "#3a2416";
+    ctx.strokeStyle = this.palette.fence;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(-half, -half);
@@ -133,9 +143,9 @@ export class Renderer {
 
     const drawPost = (x: number, y: number): void => {
       if (!this.inView(x, y, camera, w, h, 80)) return;
-      ctx.fillStyle = "#2b1c14";
+      ctx.fillStyle = this.palette.fence;
       ctx.fillRect(x - 4, y - 26, 8, 52);
-      ctx.strokeStyle = "rgba(89, 57, 36, 0.6)";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
       ctx.lineWidth = 1;
       ctx.strokeRect(x - 4, y - 26, 8, 52);
     };
@@ -166,12 +176,12 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawEnemies(enemies: Enemy[]): void {
+  private drawEnemies(enemies: Enemy[], nowMs: number): void {
     const ctx = this.ctx;
     for (const enemy of enemies) {
       ctx.save();
-      const spikes = 8;
-      ctx.fillStyle = "#1c0d0d";
+      const spikes = enemy.isBoss ? 12 : 8;
+      ctx.fillStyle = enemy.isBoss ? "#150a1c" : "#1c0d0d";
       ctx.beginPath();
       for (let i = 0; i < spikes; i++) {
         const angle = (i / spikes) * Math.PI * 2;
@@ -183,19 +193,57 @@ export class Renderer {
       }
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "#5c1414";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = enemy.isBoss ? "#7a1fa0" : "#5c1414";
+      ctx.lineWidth = enemy.isBoss ? 3 : 1.5;
+      if (enemy.isBoss) {
+        ctx.shadowColor = "#a020f0";
+        ctx.shadowBlur = 16;
+      }
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
-      ctx.fillStyle = "#c81e1e";
+      if (enemy.burnDamagePerTick > 0) {
+        const flicker = 0.5 + Math.sin(nowMs / 90 + enemy.id) * 0.2;
+        ctx.fillStyle = `rgba(255, 106, 0, ${flicker})`;
+        ctx.beginPath();
+        ctx.arc(enemy.position.x, enemy.position.y, enemy.radius * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const eyeOffset = enemy.isBoss ? 8 : 4;
+      const eyeSize = enemy.isBoss ? 3 : 1.6;
+      ctx.fillStyle = enemy.isBoss ? "#e042ff" : "#c81e1e";
       ctx.beginPath();
-      ctx.arc(enemy.position.x - 4, enemy.position.y - 2, 1.6, 0, Math.PI * 2);
-      ctx.arc(enemy.position.x + 4, enemy.position.y - 2, 1.6, 0, Math.PI * 2);
+      ctx.arc(enemy.position.x - eyeOffset, enemy.position.y - 2, eyeSize, 0, Math.PI * 2);
+      ctx.arc(enemy.position.x + eyeOffset, enemy.position.y - 2, eyeSize, 0, Math.PI * 2);
       ctx.fill();
 
-      if (enemy.hp < enemy.maxHp) this.drawHpBar(enemy.position, enemy.radius, enemy.hp / enemy.maxHp);
+      if (enemy.isBoss) {
+        ctx.fillStyle = "#e042ff";
+        ctx.font = "bold 12px Georgia";
+        ctx.textAlign = "center";
+        ctx.fillText("BOSS", enemy.position.x, enemy.position.y - enemy.radius - 20);
+        this.drawHpBar(enemy.position, enemy.radius, enemy.hp / enemy.maxHp);
+      } else if (enemy.hp < enemy.maxHp) {
+        this.drawHpBar(enemy.position, enemy.radius, enemy.hp / enemy.maxHp);
+      }
       ctx.restore();
     }
+  }
+
+  private drawAura(player: Player, nowMs: number): void {
+    if (player.auraDamagePerTick <= 0) return;
+    const ctx = this.ctx;
+    const pulse = 1 + Math.sin(nowMs / 220) * 0.05;
+    ctx.save();
+    ctx.fillStyle = "rgba(200, 30, 30, 0.12)";
+    ctx.strokeStyle = "rgba(200, 30, 30, 0.4)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(player.position.x, player.position.y, player.auraRadius * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawHpBar(position: Vec2, radius: number, ratio: number): void {
@@ -256,6 +304,35 @@ export class Renderer {
       ctx.fill();
     }
     ctx.restore();
+  }
+
+  private drawChests(chests: Chest[], nowMs: number): void {
+    const ctx = this.ctx;
+    const glow = 0.6 + Math.sin(nowMs / 260) * 0.15;
+    for (const chest of chests) {
+      const { x, y } = chest.position;
+      const w = chest.radius * 2;
+      const h = chest.radius * 1.4;
+      ctx.save();
+      ctx.shadowColor = `rgba(255, 200, 60, ${glow})`;
+      ctx.shadowBlur = 12;
+      // Base.
+      ctx.fillStyle = "#4a2f14";
+      ctx.fillRect(x - w / 2, y - h / 2, w, h);
+      ctx.strokeStyle = "#c8901e";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+      // Domed lid.
+      ctx.fillStyle = "#5c3a18";
+      ctx.beginPath();
+      ctx.ellipse(x, y - h / 2, w / 2, h / 2.4, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.stroke();
+      // Latch.
+      ctx.fillStyle = "#ffcf4a";
+      ctx.fillRect(x - 2, y - 3, 4, 8);
+      ctx.restore();
+    }
   }
 
   private drawWeaponPickups(pickups: WeaponPickup[], nowMs: number): void {

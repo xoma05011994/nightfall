@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SPAWN_INITIAL_INTERVAL_MS, SPAWN_MIN_INTERVAL_MS, SPAWN_RADIUS, SPAWN_RAMP_MS } from "../src/constants";
-import { createEnemy, currentSpawnIntervalMs, enemyStatScale, spawnPositionAround } from "../src/systems/spawner";
+import { BOSS_BASE_DAMAGE, BOSS_BASE_HP, ENEMY_BASE_DAMAGE, ENEMY_BASE_HP, SPAWN_INITIAL_INTERVAL_MS, SPAWN_MIN_INTERVAL_MS, SPAWN_RADIUS, SPAWN_RAMP_MS } from "../src/constants";
+import { createBoss, createEnemy, currentSpawnIntervalMs, enemyStatScale, spawnPositionAround } from "../src/systems/spawner";
 
 describe("currentSpawnIntervalMs", () => {
   it("starts at the initial interval when no time has elapsed", () => {
@@ -57,5 +57,32 @@ describe("createEnemy", () => {
     const late = createEnemy(2, { x: 0, y: 0 }, 240_000);
     expect(early.hp).toBe(early.maxHp);
     expect(late.hp).toBeGreaterThan(early.hp);
+  });
+
+  it("is not marked as a boss", () => {
+    expect(createEnemy(1, { x: 0, y: 0 }, 0).isBoss).toBeUndefined();
+  });
+});
+
+describe("createBoss", () => {
+  it("is marked as a boss with far more hp/damage than a grunt at the same time", () => {
+    const boss = createBoss(1, { x: 0, y: 0 }, 0);
+    const grunt = createEnemy(2, { x: 0, y: 0 }, 0);
+    expect(boss.isBoss).toBe(true);
+    expect(boss.hp).toBe(BOSS_BASE_HP);
+    expect(boss.damage).toBe(BOSS_BASE_DAMAGE);
+    expect(boss.hp).toBeGreaterThan(grunt.hp);
+    expect(boss.damage).toBeGreaterThan(grunt.damage);
+  });
+
+  it("scales hp/damage up with elapsed time the same way grunts do", () => {
+    const early = createBoss(1, { x: 0, y: 0 }, 0);
+    const late = createBoss(2, { x: 0, y: 0 }, 240_000);
+    expect(late.hp).toBeGreaterThan(early.hp);
+  });
+
+  it("uses distinct base stats from ENEMY_BASE_HP/DAMAGE", () => {
+    expect(BOSS_BASE_HP).toBeGreaterThan(ENEMY_BASE_HP * 10);
+    expect(BOSS_BASE_DAMAGE).toBeGreaterThan(ENEMY_BASE_DAMAGE);
   });
 });

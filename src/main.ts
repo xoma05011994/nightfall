@@ -1,14 +1,20 @@
 import "./ui/style.css";
 import { Renderer } from "./render/renderer";
 import { Hud, type HudWeaponSlot } from "./ui/hud";
-import { StartScreen } from "./ui/startScreen";
+import { PerkTray } from "./ui/perkTray";
+import { MainMenu } from "./ui/mainMenu";
+import { LevelSelectScreen } from "./ui/levelSelectScreen";
+import { ShopScreen } from "./ui/shopScreen";
 import { PerkModal } from "./ui/perkModal";
 import { GameOverScreen } from "./ui/gameOverScreen";
 import { WeaponPromptModal } from "./ui/weaponPromptModal";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
+import { LEVELS } from "./systems/levels";
+import { loadProfile, purchaseWeaponUpgrade, saveProfile } from "./systems/profile";
 import { WEAPON_DEFS } from "./systems/weapons";
 import { normalize } from "./math";
+import type { LevelDef } from "./types";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root")!;
@@ -16,12 +22,77 @@ const uiRoot = document.getElementById("ui-root")!;
 const renderer = new Renderer(canvas);
 const input = new InputManager();
 const hud = new Hud(uiRoot);
+const perkTray = new PerkTray(uiRoot);
 const perkModal = new PerkModal(uiRoot);
 const weaponPromptModal = new WeaponPromptModal(uiRoot);
+
+let profile = loadProfile();
+
+function showMainMenu(): void {
+  mainMenu.show();
+}
+
+function startRun(mode: "endless" | "adventure", levelDef: LevelDef | null): void {
+  renderer.setPalette(levelDef?.palette ?? null);
+  game.start(mode, levelDef, profile.weaponUpgrades);
+  hud.setVisible(true);
+  perkTray.setVisible(true);
+}
+
 const gameOverScreen = new GameOverScreen(uiRoot, () => {
   gameOverScreen.hide();
-  game.start();
-  hud.setVisible(true);
+  if (game.mode === "adventure") {
+    // Adventure runs are discrete trials picked from the level list, win or
+    // lose — back to the menu rather than silently re-running the same
+    // level with the same seed.
+    showMainMenu();
+  } else {
+    startRun("endless", null);
+  }
+});
+
+const levelSelectScreen = new LevelSelectScreen(
+  uiRoot,
+  LEVELS,
+  (level) => {
+    levelSelectScreen.hide();
+    startRun("adventure", level);
+  },
+  () => {
+    levelSelectScreen.hide();
+    showMainMenu();
+  },
+);
+
+const shopScreen = new ShopScreen(
+  uiRoot,
+  (weaponId) => {
+    const updated = purchaseWeaponUpgrade(profile, weaponId);
+    if (updated) {
+      profile = updated;
+      saveProfile(profile);
+    }
+    shopScreen.show(profile);
+  },
+  () => {
+    shopScreen.hide();
+    showMainMenu();
+  },
+);
+
+const mainMenu = new MainMenu(uiRoot, {
+  onEndless: () => {
+    mainMenu.hide();
+    startRun("endless", null);
+  },
+  onAdventure: () => {
+    mainMenu.hide();
+    levelSelectScreen.show();
+  },
+  onShop: () => {
+    mainMenu.hide();
+    shopScreen.show(profile);
+  },
 });
 
 const game = new Game({
@@ -46,31 +117,41 @@ const game = new Game({
   },
   onGameOver: () => {
     hud.setVisible(false);
-    gameOverScreen.show({ elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills });
+    perkTray.setVisible(false);
+    gameOverScreen.show({ won: false, elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills, gold: game.goldEarned });
+  },
+  onVictory: () => {
+    hud.setVisible(false);
+    perkTray.setVisible(false);
+    // Coins only bank to the persistent profile on an actual level
+    // completion — a defeat still shows the run's gold total, but it's
+    // never saved (see systems/profile.ts).
+    if (game.mode === "adventure") {
+      profile = { ...profile, coins: profile.coins + game.goldEarned };
+      saveProfile(profile);
+    }
+    gameOverScreen.show({ won: true, elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills, gold: game.goldEarned });
   },
 });
 
-const startScreen = new StartScreen(uiRoot, () => {
-  startScreen.hide();
-  game.start();
-  hud.setVisible(true);
-});
-
 hud.setVisible(false);
+perkTray.setVisible(false);
+
+function buildRenderState() {
+  return {
+    player: game.player,
+    enemies: game.enemies,
+    projectiles: game.projectiles,
+    xpOrbs: game.xpOrbs,
+    weaponPickups: game.weaponPickups,
+    chests: game.chests,
+    beamEffects: game.beamEffects,
+    coneEffects: game.coneEffects,
+  };
+}
 
 function renderNow(): void {
-  renderer.render(
-    {
-      player: game.player,
-      enemies: game.enemies,
-      projectiles: game.projectiles,
-      xpOrbs: game.xpOrbs,
-      weaponPickups: game.weaponPickups,
-      beamEffects: game.beamEffects,
-      coneEffects: game.coneEffects,
-    },
-    performance.now(),
-  );
+  renderer.render(buildRenderState(), performance.now());
 }
 
 function resize(): void {
@@ -124,26 +205,17 @@ function frame(now: number): void {
       level: game.player.level,
       elapsedMs: game.elapsedMs,
       kills: game.kills,
+      gold: game.goldEarned,
       slots,
       ammo: equipped?.ammo ?? 0,
       magazineSize: equippedDef?.magazineSize ?? 1,
       reloading: equipped?.reloading ?? false,
       reloadRatio: equipped && equippedDef ? equipped.reloadTimerMs / equippedDef.reloadMs : 0,
     });
+    perkTray.update(game.pickedPerks);
   }
 
-  renderer.render(
-    {
-      player: game.player,
-      enemies: game.enemies,
-      projectiles: game.projectiles,
-      xpOrbs: game.xpOrbs,
-      weaponPickups: game.weaponPickups,
-      beamEffects: game.beamEffects,
-      coneEffects: game.coneEffects,
-    },
-    now,
-  );
+  renderer.render(buildRenderState(), now);
 
   requestAnimationFrame(frame);
 }

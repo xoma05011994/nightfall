@@ -52,6 +52,15 @@ export interface Player {
   extraProjectiles: number;
   weaponSlots: WeaponSlots;
   equippedSlot: 0 | 1 | 2;
+  // Perk-granted mechanics — all 0/inert until the relevant perk is picked.
+  pierce: number;
+  igniteDamagePerTick: number;
+  igniteDurationMs: number;
+  lightningChainDamage: number;
+  lightningChainRadius: number;
+  auraDamagePerTick: number;
+  auraRadius: number;
+  auraTickTimerMs: number;
 }
 
 export interface Enemy {
@@ -64,6 +73,11 @@ export interface Enemy {
   radius: number;
   contactCooldownMs: number;
   contactTimerMs: number;
+  isBoss?: boolean;
+  // Ignite status — burnDamagePerTick 0 means "not burning".
+  burnDamagePerTick: number;
+  burnTicksRemaining: number;
+  burnTickTimerMs: number;
 }
 
 export interface Projectile {
@@ -76,6 +90,8 @@ export interface Projectile {
   color: string;
   splashRadius?: number;
   splashDamage?: number;
+  pierceRemaining?: number;
+  hitEnemyIds?: number[];
 }
 
 export interface XpOrb {
@@ -91,6 +107,14 @@ export interface WeaponPickup {
   weaponId: WeaponId;
   radius: number;
 }
+
+export interface Chest {
+  id: number;
+  position: Vec2;
+  radius: number;
+}
+
+export type ChestRewardType = "gold" | "xp" | "perk";
 
 // Transient render-only effects for instant-hit fire modes (beam/cone), which
 // have no Projectile entity to draw — they resolve damage immediately and
@@ -122,4 +146,19 @@ export interface WeaponPromptInfo {
   weaponId: WeaponId;
 }
 
-export type GamePhase = "start" | "playing" | "levelup" | "weaponPrompt" | "gameover";
+export type GamePhase = "start" | "playing" | "levelup" | "weaponPrompt" | "gameover" | "victory";
+
+export type GameMode = "endless" | "adventure";
+
+export interface LevelPalette {
+  bg: string;
+  splatterRGB: string; // "r, g, b" — interpolated into an rgba() string per splat
+  fence: string;
+}
+
+export interface LevelDef {
+  id: string;
+  name: string;
+  seed: number;
+  palette: LevelPalette;
+}

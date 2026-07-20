@@ -3,9 +3,9 @@ import { PERKS, getPerkById, rollPerkOffers } from "../src/systems/perks";
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 5 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(5);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(5);
+  it("has exactly 9 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(9);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(9);
   });
 
   it("damage perk multiplies damageMultiplier by 1.25", () => {
@@ -38,6 +38,42 @@ describe("PERKS", () => {
     const player = makePlayer();
     getPerkById("multishot")!.apply(player);
     expect(player.extraProjectiles).toBe(1);
+  });
+
+  it("pierce perk adds one pierce charge", () => {
+    const player = makePlayer();
+    getPerkById("pierce")!.apply(player);
+    expect(player.pierce).toBe(1);
+  });
+
+  it("ignite perk sets burn damage and a fixed duration", () => {
+    const player = makePlayer();
+    getPerkById("ignite")!.apply(player);
+    expect(player.igniteDamagePerTick).toBe(4);
+    expect(player.igniteDurationMs).toBe(3000);
+  });
+
+  it("ignite perk increases damage further on repeat picks without extending duration", () => {
+    const player = makePlayer();
+    getPerkById("ignite")!.apply(player);
+    getPerkById("ignite")!.apply(player);
+    expect(player.igniteDamagePerTick).toBe(8);
+    expect(player.igniteDurationMs).toBe(3000);
+  });
+
+  it("lightning perk sets chain damage and radius", () => {
+    const player = makePlayer();
+    getPerkById("lightning")!.apply(player);
+    expect(player.lightningChainDamage).toBe(10);
+    expect(player.lightningChainRadius).toBe(180);
+  });
+
+  it("aura perk sets damage and radius, using the larger radius on repeat picks", () => {
+    const player = makePlayer();
+    getPerkById("aura")!.apply(player);
+    getPerkById("aura")!.apply(player);
+    expect(player.auraDamagePerTick).toBe(12);
+    expect(player.auraRadius).toBe(110);
   });
 
   it("perks stack multiplicatively when applied repeatedly", () => {

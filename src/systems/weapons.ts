@@ -1,6 +1,7 @@
 import { PROJECTILE_RADIUS, PROJECTILE_TTL_MS } from "../constants";
 import { dot, normalize, pointToRaySegmentDistance, rotate } from "../math";
 import type { BeamEffect, ConeEffect, Enemy, Player, Projectile, Vec2, WeaponDef, WeaponId, WeaponInstance } from "../types";
+import { applyOnHitEffects } from "./statusEffects";
 
 // Six weapons: the pistol (always in slot 1, never dropped/swapped) plus 5
 // pickup-only weapons covering the 5 fire modes below.
@@ -150,7 +151,9 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
       const count = 1 + player.extraProjectiles;
       for (let i = 0; i < count; i++) {
         const offset = (i - (count - 1) / 2) * 0.12;
-        ctx.projectiles.push(makeProjectile(nextId++, player.position, rotate(dir, offset), damage, def));
+        const projectile = makeProjectile(nextId++, player.position, rotate(dir, offset), damage, def);
+        if (player.pierce > 0) projectile.pierceRemaining = player.pierce;
+        ctx.projectiles.push(projectile);
       }
       break;
     }
@@ -159,7 +162,9 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
       const spread = def.spreadRad ?? 0.4;
       for (let i = 0; i < pellets; i++) {
         const t = pellets === 1 ? 0 : i / (pellets - 1) - 0.5;
-        ctx.projectiles.push(makeProjectile(nextId++, player.position, rotate(dir, t * spread), damage, def));
+        const projectile = makeProjectile(nextId++, player.position, rotate(dir, t * spread), damage, def);
+        if (player.pierce > 0) projectile.pierceRemaining = player.pierce;
+        ctx.projectiles.push(projectile);
       }
       break;
     }
@@ -173,8 +178,12 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
     case "beam": {
       const range = def.beamRange ?? 400;
       for (const enemy of ctx.enemies) {
+        if (enemy.hp <= 0) continue;
         const dist = pointToRaySegmentDistance(enemy.position, player.position, dir, range);
-        if (dist !== null && dist <= enemy.radius + BEAM_HIT_WIDTH) enemy.hp -= damage;
+        if (dist !== null && dist <= enemy.radius + BEAM_HIT_WIDTH) {
+          enemy.hp -= damage;
+          applyOnHitEffects(player, ctx.enemies, enemy);
+        }
       }
       ctx.beamEffects.push({
         from: { x: player.position.x, y: player.position.y },
@@ -188,11 +197,15 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
       const range = def.coneRange ?? 150;
       const halfAngleCos = Math.cos((def.coneAngleRad ?? 0.6) / 2);
       for (const enemy of ctx.enemies) {
+        if (enemy.hp <= 0) continue;
         const toEnemy = { x: enemy.position.x - player.position.x, y: enemy.position.y - player.position.y };
         const dist = Math.sqrt(toEnemy.x * toEnemy.x + toEnemy.y * toEnemy.y);
         if (dist > range + enemy.radius) continue;
         const dirToEnemy = normalize(toEnemy);
-        if (dot(dir, dirToEnemy) >= halfAngleCos) enemy.hp -= damage;
+        if (dot(dir, dirToEnemy) >= halfAngleCos) {
+          enemy.hp -= damage;
+          applyOnHitEffects(player, ctx.enemies, enemy);
+        }
       }
       ctx.coneEffects.push({
         origin: { x: player.position.x, y: player.position.y },

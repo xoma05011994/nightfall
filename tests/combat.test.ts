@@ -1,22 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { collectDeadEnemies, resolveEnemyContactDamage, resolveProjectileHits, stepEnemies, stepProjectiles } from "../src/systems/combat";
-import type { Enemy, Projectile } from "../src/types";
-import { makePlayer } from "./testHelpers";
-
-function makeEnemy(overrides: Partial<Enemy> = {}): Enemy {
-  return {
-    id: 1,
-    position: { x: 100, y: 0 },
-    hp: 20,
-    maxHp: 20,
-    speed: 90,
-    damage: 8,
-    radius: 14,
-    contactCooldownMs: 700,
-    contactTimerMs: 0,
-    ...overrides,
-  };
-}
+import { resolveEnemyContactDamage, resolveProjectileHits, stepEnemies, stepProjectiles } from "../src/systems/combat";
+import { collectDeadEnemies } from "../src/systems/enemies";
+import type { Projectile } from "../src/types";
+import { makeEnemy, makePlayer } from "./testHelpers";
 
 function makeProjectile(overrides: Partial<Projectile> = {}): Projectile {
   return {
@@ -61,7 +47,7 @@ describe("resolveProjectileHits", () => {
   it("damages an overlapping enemy and consumes the projectile", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 20, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 5 });
-    const { survivingProjectiles, deadEnemies } = resolveProjectileHits([projectile], [enemy]);
+    const { survivingProjectiles, deadEnemies } = resolveProjectileHits([projectile], [enemy], makePlayer());
     expect(survivingProjectiles).toHaveLength(0);
     expect(deadEnemies).toHaveLength(0);
     expect(enemy.hp).toBe(15);
@@ -71,7 +57,7 @@ describe("resolveProjectileHits", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 5, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
     const enemies = [enemy];
-    const { deadEnemies } = resolveProjectileHits([projectile], enemies);
+    const { deadEnemies } = resolveProjectileHits([projectile], enemies, makePlayer());
     expect(deadEnemies).toHaveLength(1);
     expect(enemies).toHaveLength(0);
   });
@@ -79,7 +65,7 @@ describe("resolveProjectileHits", () => {
   it("leaves non-overlapping projectiles surviving with no damage dealt", () => {
     const enemy = makeEnemy({ position: { x: 1000, y: 0 }, hp: 20, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
-    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy]);
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
     expect(survivingProjectiles).toHaveLength(1);
     expect(enemy.hp).toBe(20);
   });
@@ -89,10 +75,55 @@ describe("resolveProjectileHits", () => {
     const nearby = makeEnemy({ id: 2, position: { x: 40, y: 0 }, hp: 200, maxHp: 200 });
     const farAway = makeEnemy({ id: 3, position: { x: 1000, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 60, splashRadius: 90, splashDamage: 40 });
-    resolveProjectileHits([projectile], [direct, nearby, farAway]);
+    resolveProjectileHits([projectile], [direct, nearby, farAway], makePlayer());
     expect(direct.hp).toBe(140); // direct hit: 200 - 60
     expect(nearby.hp).toBe(160); // splash only: 200 - 40
     expect(farAway.hp).toBe(200); // outside splash radius
+  });
+
+  it("a pierced projectile survives the hit instead of being consumed", () => {
+    const enemy = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 1 });
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    expect(survivingProjectiles).toHaveLength(1);
+    expect(survivingProjectiles[0]!.pierceRemaining).toBe(0);
+    expect(survivingProjectiles[0]!.hitEnemyIds).toEqual([1]);
+    expect(enemy.hp).toBe(170);
+  });
+
+  it("a pierced projectile does not hit the same enemy twice even while still overlapping it", () => {
+    const enemy = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    // Simulate a second resolve call on a projectile that already pierced
+    // through this enemy and hasn't moved off it yet.
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 0, hitEnemyIds: [1] });
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    expect(survivingProjectiles).toHaveLength(1); // no overlap found (enemy 1 excluded) -> "survives" untouched
+    expect(enemy.hp).toBe(200);
+  });
+
+  it("a projectile with no pierce remaining is consumed on hit as usual", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 0 });
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    expect(survivingProjectiles).toHaveLength(0);
+  });
+
+  it("applies ignite on hit when the player has the ignite perk active", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
+    const player = makePlayer({ igniteDamagePerTick: 5, igniteDurationMs: 1000 });
+    resolveProjectileHits([projectile], [enemy], player);
+    expect(enemy.burnDamagePerTick).toBe(5);
+    expect(enemy.burnTicksRemaining).toBeGreaterThan(0);
+  });
+
+  it("chains lightning damage to the nearest other enemy when the perk is active", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const nearby = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
+    const player = makePlayer({ lightningChainDamage: 15, lightningChainRadius: 200 });
+    resolveProjectileHits([projectile], [hit, nearby], player);
+    expect(nearby.hp).toBe(185);
   });
 });
 

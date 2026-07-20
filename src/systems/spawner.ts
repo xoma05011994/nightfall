@@ -1,4 +1,9 @@
 import {
+  BOSS_BASE_DAMAGE,
+  BOSS_BASE_HP,
+  BOSS_CONTACT_COOLDOWN_MS,
+  BOSS_RADIUS,
+  BOSS_SPEED,
   ENEMY_BASE_DAMAGE,
   ENEMY_BASE_HP,
   ENEMY_BASE_SPEED,
@@ -43,5 +48,31 @@ export function createEnemy(id: number, position: Vec2, elapsedMs: number): Enem
     radius: ENEMY_RADIUS,
     contactCooldownMs: ENEMY_CONTACT_COOLDOWN_MS,
     contactTimerMs: 0,
+    burnDamagePerTick: 0,
+    burnTicksRemaining: 0,
+    burnTickTimerMs: 0,
+  };
+}
+
+// Bosses use a flat base (lightly scaled by elapsed time, same curve as
+// grunts) rather than being a scaled-up grunt — a boss fight should read as
+// a distinct set-piece, not "a very tanky grunt".
+export function createBoss(id: number, position: Vec2, elapsedMs: number): Enemy {
+  const scale = enemyStatScale(elapsedMs);
+  const hp = Math.round(BOSS_BASE_HP * scale);
+  return {
+    id,
+    position,
+    hp,
+    maxHp: hp,
+    speed: BOSS_SPEED,
+    damage: Math.round(BOSS_BASE_DAMAGE * scale),
+    radius: BOSS_RADIUS,
+    contactCooldownMs: BOSS_CONTACT_COOLDOWN_MS,
+    contactTimerMs: 0,
+    isBoss: true,
+    burnDamagePerTick: 0,
+    burnTicksRemaining: 0,
+    burnTickTimerMs: 0,
   };
 }

@@ -1,6 +1,8 @@
 import { directionTo } from "../math";
 import type { Enemy, Player, Projectile } from "../types";
 import { circlesOverlap } from "./collision";
+import { collectDeadEnemies } from "./enemies";
+import { applyOnHitEffects } from "./statusEffects";
 
 export function stepProjectiles(projectiles: Projectile[], dt: number): Projectile[] {
   const alive: Projectile[] = [];
@@ -13,46 +15,46 @@ export function stepProjectiles(projectiles: Projectile[], dt: number): Projecti
   return alive;
 }
 
-// Removes dead (hp <= 0) enemies from `enemies` in place and returns them —
-// shared by projectile hits and the instant-hit beam/cone fire modes, which
-// apply damage directly to enemy.hp without a Projectile entity.
-export function collectDeadEnemies(enemies: Enemy[]): Enemy[] {
-  const dead: Enemy[] = [];
-  const alive: Enemy[] = [];
-  for (const enemy of enemies) {
-    if (enemy.hp <= 0) dead.push(enemy);
-    else alive.push(enemy);
-  }
-  enemies.length = 0;
-  enemies.push(...alive);
-  return dead;
-}
-
 // Single-target hit per projectile, except splash weapons (RPG) which also
-// damage every other enemy within splashRadius of the impact point. Returns
-// enemies that died this step so the caller can drop XP/loot for them.
-export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[]): { survivingProjectiles: Projectile[]; deadEnemies: Enemy[] } {
+// damage every other enemy within splashRadius of the impact point, and
+// pierce (from the Pierce perk) which lets a projectile keep flying through
+// a fixed number of extra enemies instead of being consumed on first hit.
+// Returns enemies that died this step so the caller can drop XP/loot for them.
+export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[], player: Player): { survivingProjectiles: Projectile[]; deadEnemies: Enemy[] } {
   const survivingProjectiles: Projectile[] = [];
 
   for (const projectile of projectiles) {
-    let hit = false;
+    let hitEnemy: Enemy | null = null;
     for (const enemy of enemies) {
       if (enemy.hp <= 0) continue;
+      if (projectile.hitEnemyIds?.includes(enemy.id)) continue;
       if (circlesOverlap(projectile.position, projectile.radius, enemy.position, enemy.radius)) {
-        enemy.hp -= projectile.damage;
-        hit = true;
-        if (projectile.splashRadius && projectile.splashDamage) {
-          for (const other of enemies) {
-            if (other === enemy || other.hp <= 0) continue;
-            if (circlesOverlap(projectile.position, projectile.splashRadius, other.position, other.radius)) {
-              other.hp -= projectile.splashDamage;
-            }
-          }
-        }
+        hitEnemy = enemy;
         break;
       }
     }
-    if (!hit) survivingProjectiles.push(projectile);
+
+    if (!hitEnemy) {
+      survivingProjectiles.push(projectile);
+      continue;
+    }
+
+    hitEnemy.hp -= projectile.damage;
+    applyOnHitEffects(player, enemies, hitEnemy);
+    if (projectile.splashRadius && projectile.splashDamage) {
+      for (const other of enemies) {
+        if (other === hitEnemy || other.hp <= 0) continue;
+        if (circlesOverlap(projectile.position, projectile.splashRadius, other.position, other.radius)) {
+          other.hp -= projectile.splashDamage;
+        }
+      }
+    }
+
+    if (projectile.pierceRemaining && projectile.pierceRemaining > 0) {
+      projectile.pierceRemaining -= 1;
+      projectile.hitEnemyIds = [...(projectile.hitEnemyIds ?? []), hitEnemy.id];
+      survivingProjectiles.push(projectile);
+    }
   }
 
   const deadEnemies = collectDeadEnemies(enemies);

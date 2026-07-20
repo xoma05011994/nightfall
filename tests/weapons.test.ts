@@ -1,22 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WEAPON_DEFS, canFire, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "../src/systems/weapons";
 import type { BeamEffect, ConeEffect, Enemy, Projectile } from "../src/types";
-import { makePlayer } from "./testHelpers";
-
-function makeEnemy(overrides: Partial<Enemy> = {}): Enemy {
-  return {
-    id: 1,
-    position: { x: 100, y: 0 },
-    hp: 100,
-    maxHp: 100,
-    speed: 90,
-    damage: 8,
-    radius: 14,
-    contactCooldownMs: 700,
-    contactTimerMs: 0,
-    ...overrides,
-  };
-}
+import { makeEnemy, makePlayer } from "./testHelpers";
 
 function makeCtx(enemies: Enemy[] = []) {
   return {
@@ -134,6 +119,21 @@ describe("fireWeapon — pistol (projectile mode)", () => {
     fireWeapon(instance, WEAPON_DEFS.pistol, player, { x: 1, y: 0 }, ctx, 0);
     expect(ctx.projectiles).toHaveLength(3);
   });
+
+  it("tags projectiles with pierceRemaining when the player has the pierce perk", () => {
+    const instance = createWeaponInstance("pistol");
+    const player = makePlayer({ pierce: 2 });
+    const ctx = makeCtx();
+    fireWeapon(instance, WEAPON_DEFS.pistol, player, { x: 1, y: 0 }, ctx, 0);
+    expect(ctx.projectiles[0]!.pierceRemaining).toBe(2);
+  });
+
+  it("does not set pierceRemaining when the player has no pierce", () => {
+    const instance = createWeaponInstance("pistol");
+    const ctx = makeCtx();
+    fireWeapon(instance, WEAPON_DEFS.pistol, makePlayer(), { x: 1, y: 0 }, ctx, 0);
+    expect(ctx.projectiles[0]!.pierceRemaining).toBeUndefined();
+  });
 });
 
 describe("fireWeapon — shotgun (spread mode)", () => {
@@ -173,6 +173,19 @@ describe("fireWeapon — laser cannon (beam mode)", () => {
     const ctx = makeCtx([farEnemy]);
     fireWeapon(instance, WEAPON_DEFS.laserCannon, makePlayer(), { x: 1, y: 0 }, ctx, 0);
     expect(farEnemy.hp).toBe(100);
+  });
+
+  it("applies ignite and lightning chain to enemies it hits", () => {
+    const instance = createWeaponInstance("laserCannon");
+    const hit = makeEnemy({ id: 1, position: { x: 100, y: 0 }, hp: 100, maxHp: 100 });
+    // Off the beam's own line (y=60, well past its hit width) so this only
+    // takes damage via the lightning chain, not a second direct beam hit.
+    const chainTarget = makeEnemy({ id: 2, position: { x: 100, y: 60 }, hp: 100, maxHp: 100 });
+    const ctx = makeCtx([hit, chainTarget]);
+    const player = makePlayer({ igniteDamagePerTick: 5, igniteDurationMs: 1000, lightningChainDamage: 20, lightningChainRadius: 100 });
+    fireWeapon(instance, WEAPON_DEFS.laserCannon, player, { x: 1, y: 0 }, ctx, 0);
+    expect(hit.burnDamagePerTick).toBe(5);
+    expect(chainTarget.hp).toBe(80);
   });
 });
 
