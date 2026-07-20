@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NIGHTFALL // survivor-2d</title>
+    <style>
+      :root {
+        --bg: #070505;
+        --blood: #8b0000;
+        --blood-bright: #c81e1e;
+        --bone: #d8cfc2;
+        --sickly: #6fae4a;
+        --panel: #120a0a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        overflow: hidden;
+        font-family: "Georgia", "Times New Roman", serif;
+        color: var(--bone);
+      }
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+      }
+      #ui-root {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      #ui-root button {
+        pointer-events: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div id="ui-root"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
