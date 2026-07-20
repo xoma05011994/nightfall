@@ -1,6 +1,6 @@
 import { FENCE_POST_SPACING, WORLD_HALF_SIZE } from "../constants";
 import { WEAPON_DEFS } from "../systems/weapons";
-import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, Player, Projectile, Vec2, WeaponPickup, XpOrb } from "../types";
+import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, Vec2, WeaponPickup, XpOrb } from "../types";
 
 const DEFAULT_PALETTE: LevelPalette = { bg: "#1c1310", splatterRGB: "139, 0, 0", fence: "#3a2416" };
 
@@ -19,12 +19,23 @@ export interface RenderState {
   chests: Chest[];
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
+  lightningEffects: LightningEffect[];
 }
 
 const SPLATTER_FIELD_HALF_SIZE = 4000;
 const SPLATTER_COUNT = 260;
 const BEAM_EFFECT_LIFETIME_MS = 120;
 const CONE_EFFECT_LIFETIME_MS = 100;
+const LIGHTNING_EFFECT_LIFETIME_MS = 200;
+const LIGHTNING_SEGMENTS = 6;
+const LIGHTNING_JITTER = 14;
+
+// Simple deterministic hash-based PRNG so a bolt's zigzag stays stable across
+// frames while it fades, without needing to store per-segment jitter values.
+function seededJitter(seed: number, index: number): number {
+  const x = Math.sin(seed * 12.9898 + index * 78.233) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
 
 // Deterministic ground-texture splatters generated once and reused every
 // frame — cheap atmosphere without needing image assets or truly infinite
@@ -96,6 +107,7 @@ export class Renderer {
     this.drawOrbs(state.xpOrbs, nowMs);
     this.drawEnemies(state.enemies, nowMs);
     this.drawBeamEffects(state.beamEffects, nowMs);
+    this.drawLightningEffects(state.lightningEffects, nowMs);
     this.drawProjectiles(state.projectiles);
     this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, nowMs);
@@ -284,6 +296,40 @@ export class Renderer {
       ctx.beginPath();
       ctx.moveTo(beam.from.x, beam.from.y);
       ctx.lineTo(beam.to.x, beam.to.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private drawLightningEffects(bolts: LightningEffect[], nowMs: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    for (const bolt of bolts) {
+      const life = (bolt.expiresAtMs - nowMs) / LIGHTNING_EFFECT_LIFETIME_MS;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
+
+      const dx = bolt.to.x - bolt.from.x;
+      const dy = bolt.to.y - bolt.from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "#7fe8ff";
+      ctx.shadowColor = "#7fe8ff";
+      ctx.shadowBlur = 14;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(bolt.from.x, bolt.from.y);
+      for (let i = 1; i < LIGHTNING_SEGMENTS; i++) {
+        const t = i / LIGHTNING_SEGMENTS;
+        const jitter = seededJitter(bolt.seed, i) * LIGHTNING_JITTER;
+        const x = bolt.from.x + dx * t + nx * jitter;
+        const y = bolt.from.y + dy * t + ny * jitter;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(bolt.to.x, bolt.to.y);
       ctx.stroke();
     }
     ctx.restore();

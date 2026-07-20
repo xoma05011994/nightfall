@@ -1,8 +1,8 @@
 import { directionTo } from "../math";
-import type { Enemy, Player, Projectile } from "../types";
+import type { Enemy, LightningEffect, Player, Projectile } from "../types";
 import { circlesOverlap } from "./collision";
 import { collectDeadEnemies } from "./enemies";
-import { applyOnHitEffects } from "./statusEffects";
+import { applyLifeSteal, applyOnHitEffects } from "./statusEffects";
 
 export function stepProjectiles(projectiles: Projectile[], dt: number): Projectile[] {
   const alive: Projectile[] = [];
@@ -20,7 +20,13 @@ export function stepProjectiles(projectiles: Projectile[], dt: number): Projecti
 // pierce (from the Pierce perk) which lets a projectile keep flying through
 // a fixed number of extra enemies instead of being consumed on first hit.
 // Returns enemies that died this step so the caller can drop XP/loot for them.
-export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[], player: Player): { survivingProjectiles: Projectile[]; deadEnemies: Enemy[] } {
+export function resolveProjectileHits(
+  projectiles: Projectile[],
+  enemies: Enemy[],
+  player: Player,
+  lightningEffects: LightningEffect[],
+  nowMs: number,
+): { survivingProjectiles: Projectile[]; deadEnemies: Enemy[] } {
   const survivingProjectiles: Projectile[] = [];
 
   for (const projectile of projectiles) {
@@ -40,7 +46,8 @@ export function resolveProjectileHits(projectiles: Projectile[], enemies: Enemy[
     }
 
     hitEnemy.hp -= projectile.damage;
-    applyOnHitEffects(player, enemies, hitEnemy);
+    applyLifeSteal(player, projectile.damage);
+    applyOnHitEffects(player, enemies, hitEnemy, lightningEffects, nowMs);
     if (projectile.splashRadius && projectile.splashDamage) {
       for (const other of enemies) {
         if (other === hitEnemy || other.hp <= 0) continue;

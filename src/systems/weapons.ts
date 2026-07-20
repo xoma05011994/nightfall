@@ -1,7 +1,7 @@
 import { PROJECTILE_RADIUS, PROJECTILE_TTL_MS } from "../constants";
 import { dot, normalize, pointToRaySegmentDistance, rotate } from "../math";
-import type { BeamEffect, ConeEffect, Enemy, Player, Projectile, Vec2, WeaponDef, WeaponId, WeaponInstance } from "../types";
-import { applyOnHitEffects } from "./statusEffects";
+import type { BeamEffect, ConeEffect, Enemy, LightningEffect, Player, Projectile, Vec2, WeaponDef, WeaponId, WeaponInstance } from "../types";
+import { applyLifeSteal, applyOnHitEffects } from "./statusEffects";
 
 // Six weapons: the pistol (always in slot 1, never dropped/swapped) plus 5
 // pickup-only weapons covering the 5 fire modes below.
@@ -126,6 +126,7 @@ export interface FireContext {
   projectiles: Projectile[];
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
+  lightningEffects: LightningEffect[];
   enemies: Enemy[];
   nextProjectileId: number;
 }
@@ -182,7 +183,8 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
         const dist = pointToRaySegmentDistance(enemy.position, player.position, dir, range);
         if (dist !== null && dist <= enemy.radius + BEAM_HIT_WIDTH) {
           enemy.hp -= damage;
-          applyOnHitEffects(player, ctx.enemies, enemy);
+          applyLifeSteal(player, damage);
+          applyOnHitEffects(player, ctx.enemies, enemy, ctx.lightningEffects, nowMs);
         }
       }
       ctx.beamEffects.push({
@@ -204,7 +206,8 @@ export function fireWeapon(instance: WeaponInstance, def: WeaponDef, player: Pla
         const dirToEnemy = normalize(toEnemy);
         if (dot(dir, dirToEnemy) >= halfAngleCos) {
           enemy.hp -= damage;
-          applyOnHitEffects(player, ctx.enemies, enemy);
+          applyLifeSteal(player, damage);
+          applyOnHitEffects(player, ctx.enemies, enemy, ctx.lightningEffects, nowMs);
         }
       }
       ctx.coneEffects.push({

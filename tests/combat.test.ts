@@ -47,7 +47,7 @@ describe("resolveProjectileHits", () => {
   it("damages an overlapping enemy and consumes the projectile", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 20, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 5 });
-    const { survivingProjectiles, deadEnemies } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    const { survivingProjectiles, deadEnemies } = resolveProjectileHits([projectile], [enemy], makePlayer(), [], 0);
     expect(survivingProjectiles).toHaveLength(0);
     expect(deadEnemies).toHaveLength(0);
     expect(enemy.hp).toBe(15);
@@ -57,7 +57,7 @@ describe("resolveProjectileHits", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 5, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
     const enemies = [enemy];
-    const { deadEnemies } = resolveProjectileHits([projectile], enemies, makePlayer());
+    const { deadEnemies } = resolveProjectileHits([projectile], enemies, makePlayer(), [], 0);
     expect(deadEnemies).toHaveLength(1);
     expect(enemies).toHaveLength(0);
   });
@@ -65,7 +65,7 @@ describe("resolveProjectileHits", () => {
   it("leaves non-overlapping projectiles surviving with no damage dealt", () => {
     const enemy = makeEnemy({ position: { x: 1000, y: 0 }, hp: 20, maxHp: 20 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
-    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer(), [], 0);
     expect(survivingProjectiles).toHaveLength(1);
     expect(enemy.hp).toBe(20);
   });
@@ -75,7 +75,7 @@ describe("resolveProjectileHits", () => {
     const nearby = makeEnemy({ id: 2, position: { x: 40, y: 0 }, hp: 200, maxHp: 200 });
     const farAway = makeEnemy({ id: 3, position: { x: 1000, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 60, splashRadius: 90, splashDamage: 40 });
-    resolveProjectileHits([projectile], [direct, nearby, farAway], makePlayer());
+    resolveProjectileHits([projectile], [direct, nearby, farAway], makePlayer(), [], 0);
     expect(direct.hp).toBe(140); // direct hit: 200 - 60
     expect(nearby.hp).toBe(160); // splash only: 200 - 40
     expect(farAway.hp).toBe(200); // outside splash radius
@@ -84,7 +84,7 @@ describe("resolveProjectileHits", () => {
   it("a pierced projectile survives the hit instead of being consumed", () => {
     const enemy = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 1 });
-    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer(), [], 0);
     expect(survivingProjectiles).toHaveLength(1);
     expect(survivingProjectiles[0]!.pierceRemaining).toBe(0);
     expect(survivingProjectiles[0]!.hitEnemyIds).toEqual([1]);
@@ -96,7 +96,7 @@ describe("resolveProjectileHits", () => {
     // Simulate a second resolve call on a projectile that already pierced
     // through this enemy and hasn't moved off it yet.
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 0, hitEnemyIds: [1] });
-    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer(), [], 0);
     expect(survivingProjectiles).toHaveLength(1); // no overlap found (enemy 1 excluded) -> "survives" untouched
     expect(enemy.hp).toBe(200);
   });
@@ -104,7 +104,7 @@ describe("resolveProjectileHits", () => {
   it("a projectile with no pierce remaining is consumed on hit as usual", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 30, pierceRemaining: 0 });
-    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer());
+    const { survivingProjectiles } = resolveProjectileHits([projectile], [enemy], makePlayer(), [], 0);
     expect(survivingProjectiles).toHaveLength(0);
   });
 
@@ -112,7 +112,7 @@ describe("resolveProjectileHits", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
     const player = makePlayer({ igniteDamagePerTick: 5, igniteDurationMs: 1000 });
-    resolveProjectileHits([projectile], [enemy], player);
+    resolveProjectileHits([projectile], [enemy], player, [], 0);
     expect(enemy.burnDamagePerTick).toBe(5);
     expect(enemy.burnTicksRemaining).toBeGreaterThan(0);
   });
@@ -122,8 +122,36 @@ describe("resolveProjectileHits", () => {
     const nearby = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 200, maxHp: 200 });
     const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
     const player = makePlayer({ lightningChainDamage: 15, lightningChainRadius: 200 });
-    resolveProjectileHits([projectile], [hit, nearby], player);
+    resolveProjectileHits([projectile], [hit, nearby], player, [], 0);
     expect(nearby.hp).toBe(185);
+  });
+
+  it("pushes a lightning visual effect when the chain fires", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const nearby = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
+    const player = makePlayer({ lightningChainDamage: 15, lightningChainRadius: 200 });
+    const lightningEffects: import("../src/types").LightningEffect[] = [];
+    resolveProjectileHits([projectile], [hit, nearby], player, lightningEffects, 1000);
+    expect(lightningEffects).toHaveLength(1);
+    expect(lightningEffects[0]!.expiresAtMs).toBeGreaterThan(1000);
+  });
+
+  it("deals double lightning-chain damage to a target that is already burning (ignite+lightning synergy)", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const burningTarget = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 200, maxHp: 200, burnDamagePerTick: 3 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 10 });
+    const player = makePlayer({ lightningChainDamage: 15, lightningChainRadius: 200 });
+    resolveProjectileHits([projectile], [hit, burningTarget], player, [], 0);
+    expect(burningTarget.hp).toBe(170); // 200 - 30 (doubled from 15)
+  });
+
+  it("applies life steal on a direct hit when Vampiric is active", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 20 });
+    const player = makePlayer({ hp: 50, maxHp: 100, lifeStealPercent: 0.5 });
+    resolveProjectileHits([projectile], [enemy], player, [], 0);
+    expect(player.hp).toBe(60); // 50 + 20*0.5
   });
 });
 

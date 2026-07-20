@@ -61,6 +61,16 @@ export interface Player {
   auraDamagePerTick: number;
   auraRadius: number;
   auraTickTimerMs: number;
+  // Synergy perks — several of these only do anything once paired with
+  // another perk (see systems/perks.ts's doc comment for the pairings).
+  lifeStealPercent: number;
+  berserkerIntensity: number; // max bonus damage multiplier applied at 0 hp, scaling with missing hp
+  momentumStacks: number;
+  momentumTimerMs: number;
+  momentumFireRatePerStack: number; // 0 until Momentum is picked
+  auraAppliesIgnite: boolean; // Wildfire — needs igniteDamagePerTick > 0 (from Ignite) to matter
+  auraTriggersLightning: boolean; // Overload — needs lightningChainDamage > 0 (from Chain Lightning) to matter
+  goldMultiplier: number;
 }
 
 export interface Enemy {
@@ -114,7 +124,7 @@ export interface Chest {
   radius: number;
 }
 
-export type ChestRewardType = "gold" | "xp" | "perk";
+export type ChestRewardType = "gold" | "xp" | "perk" | "magnet";
 
 // Transient render-only effects for instant-hit fire modes (beam/cone), which
 // have no Projectile entity to draw — they resolve damage immediately and
@@ -135,10 +145,23 @@ export interface ConeEffect {
   color: string;
 }
 
+// Chain Lightning perk proc — a jagged bolt from the hit enemy to the
+// chained target. `seed` picks a deterministic jitter pattern for the zigzag
+// so it doesn't need per-frame randomness to stay stable while it fades.
+export interface LightningEffect {
+  from: Vec2;
+  to: Vec2;
+  expiresAtMs: number;
+  seed: number;
+}
+
 export interface Perk {
   id: string;
   name: string;
   description: string;
+  // Inner SVG markup (no <svg> wrapper) for a 24x24 viewBox icon, drawn with
+  // currentColor so CSS controls its color.
+  icon: string;
   apply: (player: Player) => void;
 }
 

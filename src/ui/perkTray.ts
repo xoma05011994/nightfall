@@ -18,6 +18,7 @@ export class PerkTray {
       .map(
         ({ perk, count }) => `
           <div class="perk-tray-item">
+            <svg class="perk-tray-icon" viewBox="0 0 24 24">${perk.icon}</svg>
             <span class="perk-tray-name">${perk.name}</span>
             ${count > 1 ? `<span class="perk-tray-count">x${count}</span>` : ""}
           </div>

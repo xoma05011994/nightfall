@@ -1,13 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { IGNITE_TICK_MS } from "../src/constants";
-import { applyOnHitEffects, stepAura, stepBurningEnemies } from "../src/systems/statusEffects";
+import { applyLifeSteal, applyOnHitEffects, stepAura, stepBurningEnemies } from "../src/systems/statusEffects";
 import { makeEnemy, makePlayer } from "./testHelpers";
+
+describe("applyLifeSteal", () => {
+  it("does nothing when the player has no life steal", () => {
+    const player = makePlayer({ hp: 50, maxHp: 100 });
+    applyLifeSteal(player, 30);
+    expect(player.hp).toBe(50);
+  });
+
+  it("heals a fraction of the damage dealt", () => {
+    const player = makePlayer({ hp: 50, maxHp: 100, lifeStealPercent: 0.5 });
+    applyLifeSteal(player, 20);
+    expect(player.hp).toBe(60);
+  });
+
+  it("never heals past maxHp", () => {
+    const player = makePlayer({ hp: 95, maxHp: 100, lifeStealPercent: 1 });
+    applyLifeSteal(player, 50);
+    expect(player.hp).toBe(100);
+  });
+});
 
 describe("applyOnHitEffects", () => {
   it("does nothing when the player has neither ignite nor lightning", () => {
     const hit = makeEnemy({ id: 1, hp: 100 });
     const other = makeEnemy({ id: 2, position: { x: 10, y: 0 }, hp: 100 });
-    applyOnHitEffects(makePlayer(), [hit, other], hit);
+    applyOnHitEffects(makePlayer(), [hit, other], hit, [], 0);
     expect(hit.burnDamagePerTick).toBe(0);
     expect(other.hp).toBe(100);
   });
@@ -15,7 +35,7 @@ describe("applyOnHitEffects", () => {
   it("applies burn status to the hit enemy when ignite is active", () => {
     const hit = makeEnemy({ id: 1, hp: 100 });
     const player = makePlayer({ igniteDamagePerTick: 5, igniteDurationMs: 1500 });
-    applyOnHitEffects(player, [hit], hit);
+    applyOnHitEffects(player, [hit], hit, [], 0);
     expect(hit.burnDamagePerTick).toBe(5);
     expect(hit.burnTicksRemaining).toBe(Math.ceil(1500 / IGNITE_TICK_MS));
   });
@@ -25,7 +45,7 @@ describe("applyOnHitEffects", () => {
     const near = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
     const far = makeEnemy({ id: 3, position: { x: 500, y: 0 }, hp: 100 });
     const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
-    applyOnHitEffects(player, [hit, near, far], hit);
+    applyOnHitEffects(player, [hit, near, far], hit, [], 0);
     expect(near.hp).toBe(80);
     expect(far.hp).toBe(100);
   });
@@ -33,29 +53,55 @@ describe("applyOnHitEffects", () => {
   it("never chains back onto the enemy that was just hit", () => {
     const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
     const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
-    applyOnHitEffects(player, [hit], hit);
+    applyOnHitEffects(player, [hit], hit, [], 0);
     expect(hit.hp).toBe(100);
+  });
+
+  it("doubles chain damage against an already-burning target (ignite+lightning synergy)", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const burning = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100, burnDamagePerTick: 4 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
+    applyOnHitEffects(player, [hit, burning], hit, [], 0);
+    expect(burning.hp).toBe(60); // 100 - 40 (doubled)
+  });
+
+  it("applies life steal on the chain hit when Vampiric is active", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const near = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ hp: 50, maxHp: 100, lightningChainDamage: 20, lightningChainRadius: 100, lifeStealPercent: 0.5 });
+    applyOnHitEffects(player, [hit, near], hit, [], 0);
+    expect(player.hp).toBe(60); // 50 + 20*0.5
+  });
+
+  it("pushes a lightning visual effect with an expiry after nowMs", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const near = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
+    const effects: import("../src/types").LightningEffect[] = [];
+    applyOnHitEffects(player, [hit, near], hit, effects, 500);
+    expect(effects).toHaveLength(1);
+    expect(effects[0]!.expiresAtMs).toBeGreaterThan(500);
   });
 });
 
 describe("stepBurningEnemies", () => {
   it("does nothing to enemies that are not burning", () => {
     const enemy = makeEnemy({ hp: 100 });
-    const dead = stepBurningEnemies([enemy], 1);
+    const dead = stepBurningEnemies(makePlayer(), [enemy], 1);
     expect(enemy.hp).toBe(100);
     expect(dead).toHaveLength(0);
   });
 
   it("ticks burn damage on the configured interval and counts down remaining ticks", () => {
     const enemy = makeEnemy({ hp: 100, burnDamagePerTick: 5, burnTicksRemaining: 3, burnTickTimerMs: IGNITE_TICK_MS });
-    stepBurningEnemies([enemy], IGNITE_TICK_MS / 1000);
+    stepBurningEnemies(makePlayer(), [enemy], IGNITE_TICK_MS / 1000);
     expect(enemy.hp).toBe(95);
     expect(enemy.burnTicksRemaining).toBe(2);
   });
 
   it("stops burning and clears status once all ticks are consumed", () => {
     const enemy = makeEnemy({ hp: 100, burnDamagePerTick: 5, burnTicksRemaining: 1, burnTickTimerMs: IGNITE_TICK_MS });
-    stepBurningEnemies([enemy], IGNITE_TICK_MS / 1000);
+    stepBurningEnemies(makePlayer(), [enemy], IGNITE_TICK_MS / 1000);
     expect(enemy.burnDamagePerTick).toBe(0);
     expect(enemy.burnTicksRemaining).toBe(0);
   });
@@ -63,9 +109,16 @@ describe("stepBurningEnemies", () => {
   it("returns and removes enemies killed by burn damage", () => {
     const enemy = makeEnemy({ hp: 3, burnDamagePerTick: 5, burnTicksRemaining: 1, burnTickTimerMs: IGNITE_TICK_MS });
     const enemies = [enemy];
-    const dead = stepBurningEnemies(enemies, IGNITE_TICK_MS / 1000);
+    const dead = stepBurningEnemies(makePlayer(), enemies, IGNITE_TICK_MS / 1000);
     expect(dead).toEqual([enemy]);
     expect(enemies).toHaveLength(0);
+  });
+
+  it("applies life steal on each burn tick when Vampiric is active", () => {
+    const enemy = makeEnemy({ hp: 100, burnDamagePerTick: 5, burnTicksRemaining: 3, burnTickTimerMs: IGNITE_TICK_MS });
+    const player = makePlayer({ hp: 50, maxHp: 100, lifeStealPercent: 0.4 });
+    stepBurningEnemies(player, [enemy], IGNITE_TICK_MS / 1000);
+    expect(player.hp).toBe(52); // 50 + 5*0.4
   });
 });
 
@@ -73,7 +126,7 @@ describe("stepAura", () => {
   it("does nothing when the player has no aura", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 100 });
     const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 0 });
-    stepAura(player, [enemy], 1);
+    stepAura(player, [enemy], 1, [], 0);
     expect(enemy.hp).toBe(100);
   });
 
@@ -81,7 +134,7 @@ describe("stepAura", () => {
     const inRange = makeEnemy({ id: 1, position: { x: 10, y: 0 }, hp: 100 });
     const outOfRange = makeEnemy({ id: 2, position: { x: 500, y: 0 }, hp: 100 });
     const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0 });
-    stepAura(player, [inRange, outOfRange], 0.1);
+    stepAura(player, [inRange, outOfRange], 0.1, [], 0);
     expect(inRange.hp).toBe(94);
     expect(outOfRange.hp).toBe(100);
   });
@@ -89,7 +142,7 @@ describe("stepAura", () => {
   it("does not tick again until the interval has elapsed", () => {
     const enemy = makeEnemy({ position: { x: 10, y: 0 }, hp: 100 });
     const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 1000 });
-    stepAura(player, [enemy], 0.1);
+    stepAura(player, [enemy], 0.1, [], 0);
     expect(enemy.hp).toBe(100);
   });
 
@@ -97,8 +150,53 @@ describe("stepAura", () => {
     const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 2 });
     const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0 });
     const enemies = [enemy];
-    const dead = stepAura(player, enemies, 0.1);
+    const dead = stepAura(player, enemies, 0.1, [], 0);
     expect(dead).toEqual([enemy]);
     expect(enemies).toHaveLength(0);
+  });
+
+  it("applies life steal per enemy hit when Vampiric is active", () => {
+    const enemies = [makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 }), makeEnemy({ id: 2, position: { x: 10, y: 0 }, hp: 100 })];
+    const player = makePlayer({ position: { x: 0, y: 0 }, hp: 50, maxHp: 100, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, lifeStealPercent: 0.5 });
+    stepAura(player, enemies, 0.1, [], 0);
+    expect(player.hp).toBe(56); // 50 + 3 + 3
+  });
+
+  it("Wildfire: ignites enemies it hits only when Ignite is also active", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraAppliesIgnite: true, igniteDamagePerTick: 4, igniteDurationMs: 1000 });
+    stepAura(player, [enemy], 0.1, [], 0);
+    expect(enemy.burnDamagePerTick).toBe(4);
+  });
+
+  it("Wildfire does nothing without Ignite also picked (igniteDamagePerTick still 0)", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraAppliesIgnite: true });
+    stepAura(player, [enemy], 0.1, [], 0);
+    expect(enemy.burnDamagePerTick).toBe(0);
+  });
+
+  it("Overload: arcs lightning to the nearest enemy just past the aura's edge when Lightning is also active", () => {
+    const inAura = makeEnemy({ id: 1, position: { x: 10, y: 0 }, hp: 100 });
+    const justOutside = makeEnemy({ id: 2, position: { x: 120, y: 0 }, hp: 100 });
+    const player = makePlayer({
+      position: { x: 0, y: 0 },
+      auraDamagePerTick: 6,
+      auraRadius: 100,
+      auraTickTimerMs: 0,
+      auraTriggersLightning: true,
+      lightningChainDamage: 15,
+      lightningChainRadius: 50,
+    });
+    stepAura(player, [inAura, justOutside], 0.1, [], 0);
+    expect(justOutside.hp).toBe(85);
+  });
+
+  it("Overload does nothing without Chain Lightning also picked", () => {
+    const inAura = makeEnemy({ id: 1, position: { x: 10, y: 0 }, hp: 100 });
+    const justOutside = makeEnemy({ id: 2, position: { x: 120, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraTriggersLightning: true });
+    stepAura(player, [inAura, justOutside], 0.1, [], 0);
+    expect(justOutside.hp).toBe(100);
   });
 });

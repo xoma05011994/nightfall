@@ -8,15 +8,16 @@ export function spawnChest(id: number, position: Vec2): Chest {
 
 export interface ChestReward {
   type: ChestRewardType;
-  amount: number; // gold amount or xp amount; unused (0) for "perk"
+  amount: number; // gold amount or xp amount; unused (0) for "perk"/"magnet"
 }
 
-// Equal odds across the three reward types.
+// Equal odds across the four reward types.
 export function rollChestReward(rng: () => number): ChestReward {
   const roll = rng();
-  if (roll < 1 / 3) return { type: "gold", amount: Math.floor(CHEST_GOLD_MIN + rng() * (CHEST_GOLD_MAX - CHEST_GOLD_MIN + 1)) };
-  if (roll < 2 / 3) return { type: "xp", amount: CHEST_XP_AMOUNT };
-  return { type: "perk", amount: 0 };
+  if (roll < 0.25) return { type: "gold", amount: Math.floor(CHEST_GOLD_MIN + rng() * (CHEST_GOLD_MAX - CHEST_GOLD_MIN + 1)) };
+  if (roll < 0.5) return { type: "xp", amount: CHEST_XP_AMOUNT };
+  if (roll < 0.75) return { type: "perk", amount: 0 };
+  return { type: "magnet", amount: 0 };
 }
 
 export function findTouchedChest(chests: Chest[], player: Player): Chest | null {

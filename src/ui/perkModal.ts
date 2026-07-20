@@ -22,7 +22,7 @@ export class PerkModal {
     for (const perk of offers) {
       const card = document.createElement("div");
       card.className = "perk-card";
-      card.innerHTML = `<div class="perk-card-name">${perk.name}</div><div class="perk-card-desc">${perk.description}</div>`;
+      card.innerHTML = `<svg class="perk-card-icon" viewBox="0 0 24 24">${perk.icon}</svg><div class="perk-card-name">${perk.name}</div><div class="perk-card-desc">${perk.description}</div>`;
       card.addEventListener("click", () => {
         this.hide();
         this.onSelect?.(perk);

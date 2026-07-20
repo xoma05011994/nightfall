@@ -140,6 +140,27 @@ describe("Game — chests", () => {
     expect(found!.goldEarned).toBeGreaterThan(0);
   });
 
+  it("a magnet reward collects all xp orbs on the map into the player's xp", () => {
+    // Seed chosen empirically to land a magnet reward. Orbs are placed far
+    // from the player so only the magnet effect (not proximity pickup)
+    // could account for them disappearing.
+    let matched = false;
+    for (let seed = 1; seed <= 50 && !matched; seed++) {
+      const { game } = makeGame(seed);
+      const levelBefore = game.player.level;
+      game.xpOrbs.push({ id: 1, position: { x: 5000, y: 5000 }, value: 15, radius: 6 });
+      game.xpOrbs.push({ id: 2, position: { x: -5000, y: -5000 }, value: 10, radius: 6 });
+      game.chests.push({ id: 1, position: { ...game.player.position }, radius: 18 });
+      game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, false, 0);
+      // A magnet reward clears every orb on the map and grants their
+      // combined value as xp, which may trigger a level-up.
+      if (game.xpOrbs.length === 0 && game.player.level > levelBefore) {
+        matched = true;
+      }
+    }
+    expect(matched).toBe(true);
+  });
+
   it("a perk reward pauses the game in the levelup phase and offers perk choices", () => {
     // Seed chosen empirically to land a perk reward (routes through the
     // same onLevelUp flow as a level-up XP orb).

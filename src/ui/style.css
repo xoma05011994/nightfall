@@ -37,12 +37,23 @@
 
 .perk-tray-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 6px;
   padding: 3px 8px;
   background: rgba(18, 10, 10, 0.6);
   border-left: 2px solid #8b0000;
   font-size: 12px;
+}
+
+.perk-tray-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #c81e1e;
+}
+
+.perk-tray-name {
+  flex: 1;
 }
 
 .perk-tray-count {
@@ -251,6 +262,14 @@
 .perk-card:hover {
   border-color: #c81e1e;
   transform: translateY(-4px);
+}
+
+.perk-card-icon {
+  width: 36px;
+  height: 36px;
+  color: #c81e1e;
+  filter: drop-shadow(0 0 6px rgba(200, 30, 30, 0.5));
+  margin-bottom: 10px;
 }
 
 .perk-card-name {

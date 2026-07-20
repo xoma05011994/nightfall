@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WEAPON_DEFS, canFire, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "../src/systems/weapons";
-import type { BeamEffect, ConeEffect, Enemy, Projectile } from "../src/types";
+import type { BeamEffect, ConeEffect, Enemy, LightningEffect, Projectile } from "../src/types";
 import { makeEnemy, makePlayer } from "./testHelpers";
 
 function makeCtx(enemies: Enemy[] = []) {
@@ -8,6 +8,7 @@ function makeCtx(enemies: Enemy[] = []) {
     projectiles: [] as Projectile[],
     beamEffects: [] as BeamEffect[],
     coneEffects: [] as ConeEffect[],
+    lightningEffects: [] as LightningEffect[],
     enemies,
     nextProjectileId: 1,
   };

@@ -13,22 +13,27 @@ describe("spawnChest", () => {
 });
 
 describe("rollChestReward", () => {
-  it("returns a gold reward within the configured range for the low third of the roll", () => {
+  it("returns a gold reward within the configured range for the first quarter of the roll", () => {
     const reward = rollChestReward(() => 0);
     expect(reward.type).toBe("gold");
     expect(reward.amount).toBeGreaterThanOrEqual(CHEST_GOLD_MIN);
     expect(reward.amount).toBeLessThanOrEqual(CHEST_GOLD_MAX);
   });
 
-  it("returns an xp reward for the middle third of the roll", () => {
-    const reward = rollChestReward(() => 0.5);
+  it("returns an xp reward for the second quarter of the roll", () => {
+    const reward = rollChestReward(() => 0.3);
     expect(reward.type).toBe("xp");
     expect(reward.amount).toBe(CHEST_XP_AMOUNT);
   });
 
-  it("returns a perk reward for the high third of the roll", () => {
-    const reward = rollChestReward(() => 0.9);
+  it("returns a perk reward for the third quarter of the roll", () => {
+    const reward = rollChestReward(() => 0.6);
     expect(reward.type).toBe("perk");
+  });
+
+  it("returns a magnet reward for the fourth quarter of the roll", () => {
+    const reward = rollChestReward(() => 0.9);
+    expect(reward.type).toBe("magnet");
   });
 });
 

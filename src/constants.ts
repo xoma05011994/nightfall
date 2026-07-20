@@ -70,3 +70,13 @@ export const BOSS_CONTACT_COOLDOWN_MS = 900;
 export const ADVENTURE_DURATION_MS = 6 * 60_000;
 export const ADVENTURE_BOSS_1_TRIGGER_MS = 3 * 60_000;
 export const ADVENTURE_BOSS_2_TRIGGER_MS = ADVENTURE_DURATION_MS;
+
+// v0.4 — Momentum perk: a kill refreshes the stack timer and adds a stack;
+// stacks decay back to 0 as a group once nothing has died in a while,
+// rather than peeling off one at a time (simpler to reason about and to
+// read off the HUD later).
+export const MOMENTUM_MAX_STACKS = 5;
+export const MOMENTUM_DURATION_MS = 3000;
+
+// v0.4 — chest reward roll now has 4 equally-weighted outcomes.
+export const CHEST_REWARD_TYPES = ["gold", "xp", "perk", "magnet"] as const;

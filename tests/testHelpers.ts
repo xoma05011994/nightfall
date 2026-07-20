@@ -26,6 +26,14 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
     auraDamagePerTick: 0,
     auraRadius: 0,
     auraTickTimerMs: 0,
+    lifeStealPercent: 0,
+    berserkerIntensity: 0,
+    momentumStacks: 0,
+    momentumTimerMs: 0,
+    momentumFireRatePerStack: 0,
+    auraAppliesIgnite: false,
+    auraTriggersLightning: false,
+    goldMultiplier: 1,
     ...overrides,
   };
 }

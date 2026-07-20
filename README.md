@@ -1,6 +1,6 @@
 # Nightfall (survivor-2d)
 
-2D top-down survival roguelite — v0.3. Single-player, no backend.
+2D top-down survival roguelite — v0.4. Single-player, no backend.
 
 ## Dev workflow
 
@@ -31,16 +31,24 @@ npm run build         # typecheck + production build
   time; their stats scale gently with elapsed run time. Any kill has a small
   chance to drop one of the 5 pickup weapons.
 - Kills also drop XP orbs that fly toward the player once in pickup range.
-  Leveling up offers a choice of 3 perks from a pool of 9: the original 5
-  (damage/fire-rate/max-hp/move-speed/extra-projectile) plus 4 with their own
-  mechanics — **Pierce** (projectiles punch through an extra enemy),
+  Leveling up offers a choice of 3 perks (each with its own icon) from a pool
+  of 15: the original 5 (damage/fire-rate/max-hp/move-speed/extra-projectile),
+  4 from v0.3 — **Pierce** (projectiles punch through an extra enemy),
   **Ignite** (hits apply a burn damage-over-time), **Chain Lightning** (hits
-  arc bonus damage to the nearest other enemy), **Deadly Aura** (continuous
-  radius damage around the player, independent of the equipped weapon).
-  Perks picked this run are listed in a tray on the left side of the HUD.
+  arc bonus damage to the nearest other enemy, rendered as a jagged bolt),
+  **Deadly Aura** (continuous radius damage around the player, independent of
+  the equipped weapon) — and 6 new synergy-driven perks: **Vampiric**
+  (life steal on any damage source), **Berserker** (damage rises as your HP
+  drops), **Momentum** (killing stacks a temporary fire-rate boost),
+  **Wildfire** (Aura hits also apply Ignite — inert without Aura),
+  **Overload** (Aura hits can arc a bonus Lightning bolt to a nearby enemy —
+  inert without both Aura and Lightning), **Greed** (bigger pickup radius +
+  more gold from chests). Perks picked this run are listed in a tray on the
+  left side of the HUD.
 - Chests spawn periodically (a different rhythm from weapon drops, which are
-  kill-triggered) — walking onto one grants gold, a chunk of XP, or a perk
-  choice, chosen at random.
+  kill-triggered) — walking onto one grants gold, a chunk of XP, a perk
+  choice, or a **Magnet** burst that instantly collects every XP orb
+  currently on the map, chosen at random (4-way even odds).
 - Two game modes, picked from the main menu:
   - **Endless** — the original open-ended survive-as-long-as-you-can loop.
   - **Adventure** — pick 1 of 10 pre-generated levels (each a fixed RNG seed,
@@ -83,7 +91,7 @@ npm run build         # typecheck + production build
   orchestration logic (weapon pickups, chests, adventure timing, weapon
   upgrades, level seeding).
 
-## Known gaps (accepted for v0.3)
+## Known gaps (accepted for v0.4)
 
 - No sound.
 - Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade

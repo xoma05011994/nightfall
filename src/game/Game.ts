@@ -4,6 +4,8 @@ import {
   BOSS_RADIUS,
   CHEST_SPAWN_INTERVAL_MS,
   ENEMY_RADIUS,
+  MOMENTUM_DURATION_MS,
+  MOMENTUM_MAX_STACKS,
   PLAYER_BASE_HP,
   PLAYER_BASE_MOVE_SPEED,
   PLAYER_BASE_PICKUP_RADIUS,
@@ -29,6 +31,7 @@ import type {
   GameMode,
   GamePhase,
   LevelDef,
+  LightningEffect,
   Perk,
   Player,
   Projectile,
@@ -71,6 +74,14 @@ function createPlayer(): Player {
     auraDamagePerTick: 0,
     auraRadius: 0,
     auraTickTimerMs: 0,
+    lifeStealPercent: 0,
+    berserkerIntensity: 0,
+    momentumStacks: 0,
+    momentumTimerMs: 0,
+    momentumFireRatePerStack: 0,
+    auraAppliesIgnite: false,
+    auraTriggersLightning: false,
+    goldMultiplier: 1,
   };
 }
 
@@ -86,6 +97,7 @@ export class Game {
   chests: Chest[] = [];
   beamEffects: BeamEffect[] = [];
   coneEffects: ConeEffect[] = [];
+  lightningEffects: LightningEffect[] = [];
   elapsedMs = 0;
   kills = 0;
   goldEarned = 0;
@@ -133,6 +145,7 @@ export class Game {
     this.chests = [];
     this.beamEffects = [];
     this.coneEffects = [];
+    this.lightningEffects = [];
     this.elapsedMs = 0;
     this.kills = 0;
     this.goldEarned = 0;
@@ -163,20 +176,22 @@ export class Game {
       stepWeaponInstance(slot, WEAPON_DEFS[slot.weaponId], dt);
     }
 
+    // Momentum's stacks decay as a group once nothing has died in a while.
+    if (this.player.momentumStacks > 0) {
+      this.player.momentumTimerMs -= dt * 1000;
+      if (this.player.momentumTimerMs <= 0) this.player.momentumStacks = 0;
+    }
+
     if (fireHeld && (aimDir.x !== 0 || aimDir.y !== 0)) {
       const instance = this.player.weaponSlots[this.player.equippedSlot];
       if (instance) {
         const def = WEAPON_DEFS[instance.weaponId];
-        const upgradeLevel = this.weaponUpgrades[instance.weaponId] ?? 0;
-        // Meta-progression is a per-weapon damage multiplier layered on top
-        // of the run's perk-driven damageMultiplier — applied via a
-        // shallow-cloned player so weapons.ts needs no knowledge of
-        // upgrades at all (it only ever reads player.damageMultiplier).
-        const firingPlayer = upgradeLevel > 0 ? { ...this.player, damageMultiplier: this.player.damageMultiplier * weaponDamageMultiplier(upgradeLevel) } : this.player;
+        const firingPlayer = this.buildFiringPlayer(instance.weaponId);
         this.nextProjectileId = fireWeapon(instance, def, firingPlayer, normalize(aimDir), {
           projectiles: this.projectiles,
           beamEffects: this.beamEffects,
           coneEffects: this.coneEffects,
+          lightningEffects: this.lightningEffects,
           enemies: this.enemies,
           nextProjectileId: this.nextProjectileId,
         }, nowMs);
@@ -185,9 +200,10 @@ export class Game {
     }
     this.beamEffects = this.beamEffects.filter((b) => b.expiresAtMs > nowMs);
     this.coneEffects = this.coneEffects.filter((c) => c.expiresAtMs > nowMs);
+    this.lightningEffects = this.lightningEffects.filter((l) => l.expiresAtMs > nowMs);
 
     this.projectiles = stepProjectiles(this.projectiles, dt);
-    const { survivingProjectiles, deadEnemies } = resolveProjectileHits(this.projectiles, this.enemies, this.player);
+    const { survivingProjectiles, deadEnemies } = resolveProjectileHits(this.projectiles, this.enemies, this.player, this.lightningEffects, nowMs);
     this.projectiles = survivingProjectiles;
     this.handleDeadEnemies(deadEnemies);
 
@@ -195,8 +211,8 @@ export class Game {
     for (const enemy of this.enemies) enemy.position = clampToWorldBounds(enemy.position, enemy.radius);
     resolveEnemyContactDamage(this.enemies, this.player);
 
-    this.handleDeadEnemies(stepBurningEnemies(this.enemies, dt));
-    this.handleDeadEnemies(stepAura(this.player, this.enemies, dt));
+    this.handleDeadEnemies(stepBurningEnemies(this.player, this.enemies, dt));
+    this.handleDeadEnemies(stepAura(this.player, this.enemies, dt, this.lightningEffects, nowMs));
 
     const { survivingOrbs, xpCollected } = stepXpOrbs(this.xpOrbs, this.player, dt);
     this.xpOrbs = survivingOrbs;
@@ -265,6 +281,24 @@ export class Game {
     this.enemies.push(createBoss(this.nextEnemyId++, clampToWorldBounds(pos, BOSS_RADIUS), this.elapsedMs));
   }
 
+  // Folds meta-progression weapon upgrades, Berserker (damage scales with
+  // missing hp), and Momentum (fire-rate stacks from recent kills) into a
+  // shallow-cloned player for this shot only — weapons.ts stays unaware of
+  // any of these, it only ever reads damageMultiplier/attackCooldownMultiplier.
+  private buildFiringPlayer(weaponId: WeaponId): Player {
+    const upgradeLevel = this.weaponUpgrades[weaponId] ?? 0;
+    const upgradeMult = upgradeLevel > 0 ? weaponDamageMultiplier(upgradeLevel) : 1;
+    const berserkerMult = this.player.berserkerIntensity > 0 ? 1 + this.player.berserkerIntensity * (1 - this.player.hp / this.player.maxHp) : 1;
+    const momentumMult = this.player.momentumFireRatePerStack > 0 ? Math.max(0.3, 1 - this.player.momentumStacks * this.player.momentumFireRatePerStack) : 1;
+
+    if (upgradeMult === 1 && berserkerMult === 1 && momentumMult === 1) return this.player;
+    return {
+      ...this.player,
+      damageMultiplier: this.player.damageMultiplier * upgradeMult * berserkerMult,
+      attackCooldownMultiplier: this.player.attackCooldownMultiplier * momentumMult,
+    };
+  }
+
   private grantXpAndCheckLevelUp(amount: number): void {
     const { leveledUp } = grantXp(this.player, amount);
     if (leveledUp) {
@@ -277,9 +311,15 @@ export class Game {
     this.chests = this.chests.filter((c) => c.id !== chest.id);
     const reward = rollChestReward(this.rng);
     if (reward.type === "gold") {
-      this.goldEarned += reward.amount;
+      this.goldEarned += Math.round(reward.amount * this.player.goldMultiplier);
     } else if (reward.type === "xp") {
       this.grantXpAndCheckLevelUp(reward.amount);
+    } else if (reward.type === "magnet") {
+      // Instantly collects every XP orb currently on the map, rather than
+      // pulling them in over time like the passive pickup radius does.
+      const total = this.xpOrbs.reduce((sum, orb) => sum + orb.value, 0);
+      this.xpOrbs = [];
+      if (total > 0) this.grantXpAndCheckLevelUp(total);
     } else {
       this.phase = "levelup";
       this.callbacks.onLevelUp(rollPerkOffers(this.rng));
@@ -287,6 +327,11 @@ export class Game {
   }
 
   private handleDeadEnemies(deadEnemies: Enemy[]): void {
+    if (deadEnemies.length === 0) return;
+    if (this.player.momentumFireRatePerStack > 0) {
+      this.player.momentumStacks = Math.min(MOMENTUM_MAX_STACKS, this.player.momentumStacks + deadEnemies.length);
+      this.player.momentumTimerMs = MOMENTUM_DURATION_MS;
+    }
     for (const enemy of deadEnemies) {
       this.kills += 1;
       this.xpOrbs.push(spawnXpOrbForEnemy(this.nextOrbId++, enemy));

@@ -3,9 +3,15 @@ import { PERKS, getPerkById, rollPerkOffers } from "../src/systems/perks";
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 9 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(9);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(9);
+  it("has exactly 15 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(15);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(15);
+  });
+
+  it("every perk has a non-empty icon", () => {
+    for (const perk of PERKS) {
+      expect(perk.icon.length).toBeGreaterThan(0);
+    }
   });
 
   it("damage perk multiplies damageMultiplier by 1.25", () => {
@@ -76,6 +82,45 @@ describe("PERKS", () => {
     expect(player.auraRadius).toBe(110);
   });
 
+  it("vampiric perk adds life steal, stacking additively", () => {
+    const player = makePlayer();
+    getPerkById("vampiric")!.apply(player);
+    getPerkById("vampiric")!.apply(player);
+    expect(player.lifeStealPercent).toBeCloseTo(0.16, 5);
+  });
+
+  it("berserker perk adds to the low-hp damage bonus", () => {
+    const player = makePlayer();
+    getPerkById("berserker")!.apply(player);
+    expect(player.berserkerIntensity).toBeCloseTo(0.25, 5);
+  });
+
+  it("momentum perk adds to the per-stack fire-rate bonus", () => {
+    const player = makePlayer();
+    getPerkById("momentum")!.apply(player);
+    expect(player.momentumFireRatePerStack).toBeCloseTo(0.03, 5);
+  });
+
+  it("wildfire perk sets auraAppliesIgnite", () => {
+    const player = makePlayer();
+    getPerkById("wildfire")!.apply(player);
+    expect(player.auraAppliesIgnite).toBe(true);
+  });
+
+  it("overload perk sets auraTriggersLightning", () => {
+    const player = makePlayer();
+    getPerkById("overload")!.apply(player);
+    expect(player.auraTriggersLightning).toBe(true);
+  });
+
+  it("greed perk increases pickup radius and gold multiplier", () => {
+    const player = makePlayer();
+    const before = player.pickupRadius;
+    getPerkById("greed")!.apply(player);
+    expect(player.pickupRadius).toBeCloseTo(before * 1.3, 5);
+    expect(player.goldMultiplier).toBeCloseTo(1.2, 5);
+  });
+
   it("perks stack multiplicatively when applied repeatedly", () => {
     const player = makePlayer();
     getPerkById("damage")!.apply(player);
@@ -92,7 +137,7 @@ describe("rollPerkOffers", () => {
   });
 
   it("never offers more perks than exist in the pool", () => {
-    const offers = rollPerkOffers(() => 0.9, 10);
+    const offers = rollPerkOffers(() => 0.9, PERKS.length + 10);
     expect(offers).toHaveLength(PERKS.length);
   });
 });

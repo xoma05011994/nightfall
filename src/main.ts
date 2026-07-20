@@ -147,6 +147,7 @@ function buildRenderState() {
     chests: game.chests,
     beamEffects: game.beamEffects,
     coneEffects: game.coneEffects,
+    lightningEffects: game.lightningEffects,
   };
 }
 
