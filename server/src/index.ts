@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { setup } from "rivetkit";
 import { matchmaker } from "./actors/matchmaker";
 import { match } from "./actors/match";
@@ -12,3 +13,15 @@ export const registry = setup({
 });
 
 registry.start();
+
+// registry.start() in the default "envoy" runtime mode (used here, not Rivet
+// Compute's "serverless" mode) doesn't bind any port — it only opens a
+// persistent outbound connection to Rivet's engine (RIVET_ENDPOINT), which
+// is how actors actually get hosted. Railway (and most PaaS health checks)
+// still expect the deployed process to answer on $PORT, so this tiny server
+// exists purely to satisfy that — it has nothing to do with actor traffic.
+const healthPort = Number(process.env.PORT) || 8080;
+createServer((_req, res) => {
+  res.writeHead(200, { "content-type": "text/plain" });
+  res.end("ok");
+}).listen(healthPort);
