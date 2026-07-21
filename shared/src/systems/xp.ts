@@ -16,16 +16,25 @@ export function spawnXpOrbForEnemy(id: number, enemy: Enemy): XpOrb {
   };
 }
 
-// Applies XP to the player and rolls over as many levels as the amount
+// Widened beyond `Player` so co-op's pooled party progress (a plain
+// {xp,level,xpToNext} counter, not a full Player) can reuse the exact same
+// leveling math instead of duplicating this loop.
+export interface XpProgress {
+  xp: number;
+  level: number;
+  xpToNext: number;
+}
+
+// Applies XP to the tracker and rolls over as many levels as the amount
 // covers in one go (handles multi-level jumps from a single kill).
-export function grantXp(player: Player, amount: number): { leveledUp: boolean; levelsGained: number } {
-  player.xp += amount;
+export function grantXp(tracker: XpProgress, amount: number): { leveledUp: boolean; levelsGained: number } {
+  tracker.xp += amount;
   let levelsGained = 0;
-  while (player.xp >= player.xpToNext) {
-    player.xp -= player.xpToNext;
-    player.level += 1;
+  while (tracker.xp >= tracker.xpToNext) {
+    tracker.xp -= tracker.xpToNext;
+    tracker.level += 1;
     levelsGained += 1;
-    player.xpToNext = xpToNextForLevel(player.level);
+    tracker.xpToNext = xpToNextForLevel(tracker.level);
   }
   return { leveledUp: levelsGained > 0, levelsGained };
 }

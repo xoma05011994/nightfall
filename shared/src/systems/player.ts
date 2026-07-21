@@ -38,5 +38,6 @@ export function createPlayer(): Player {
     auraAppliesIgnite: false,
     auraTriggersLightning: false,
     goldMultiplier: 1,
+    chainLinkDamagePerTick: 0,
   };
 }

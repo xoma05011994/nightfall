@@ -34,6 +34,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
     auraAppliesIgnite: false,
     auraTriggersLightning: false,
     goldMultiplier: 1,
+    chainLinkDamagePerTick: 0,
     ...overrides,
   };
 }

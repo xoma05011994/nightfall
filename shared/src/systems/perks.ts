@@ -185,6 +185,16 @@ export const PERKS: Perk[] = [
       p.lightningChainRadius += 60;
     },
   },
+  {
+    id: "chainLink",
+    name: "Chain Link",
+    description: "A laser between party members damages enemies caught between you — multiplayer only",
+    icon: '<circle cx="5" cy="12" r="3" fill="currentColor"/><circle cx="19" cy="12" r="3" fill="currentColor"/><line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
+    minPartySize: 2,
+    apply: (p) => {
+      p.chainLinkDamagePerTick += 8;
+    },
+  },
 ];
 
 export function getPerkById(id: string): Perk | undefined {
@@ -200,15 +210,18 @@ export function perkTier(id: string): number {
 }
 
 // Samples PERK_OFFER_COUNT distinct perks without replacement, excluding any
-// perk whose prerequisites (`requires`) aren't fully met yet, or that's
-// already been picked PERK_MAX_RANK times.
-export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: number }[] = [], count: number = PERK_OFFER_COUNT): Perk[] {
+// perk whose prerequisites (`requires`) aren't fully met yet, that's already
+// been picked PERK_MAX_RANK times, or whose `minPartySize` exceeds the
+// current connected party (partySize defaults to 1 — solo never sees
+// multiplayer-only perks like Chain Link without a caller opting in).
+export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: number }[] = [], count: number = PERK_OFFER_COUNT, partySize: number = 1): Perk[] {
   const pickedIds = new Set(picked.map((p) => p.perk.id));
   const rankById = new Map(picked.map((p) => [p.perk.id, p.count]));
 
   const pool = PERKS.filter((perk) => {
     if ((rankById.get(perk.id) ?? 0) >= PERK_MAX_RANK) return false;
     if (perk.requires && !perk.requires.every((id) => pickedIds.has(id))) return false;
+    if (perk.minPartySize && partySize < perk.minPartySize) return false;
     return true;
   });
 

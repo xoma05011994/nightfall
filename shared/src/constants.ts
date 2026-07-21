@@ -47,6 +47,19 @@ export const WEAPON_PICKUP_RADIUS = 16;
 export const IGNITE_TICK_MS = 500;
 export const AURA_TICK_MS = 400;
 
+// v0.6 M4 — Chain Link (multiplayer-only perk): a laser drawn between each
+// pair of adjacent connected players, damaging enemies caught within
+// CHAIN_LINK_HIT_WIDTH px of the segment. Same tick cadence as Deadly Aura.
+export const CHAIN_LINK_TICK_MS = 400;
+export const CHAIN_LINK_HIT_WIDTH = 24;
+
+// v0.6 M5 — how long a match actor waits with zero connected players before
+// closing its room and ending its own tick loop. Long enough to ride out a
+// brief network drop (RivetKit auto-reconnects the underlying connection)
+// or a deliberate page reload, short enough not to leave abandoned actors
+// running indefinitely.
+export const ROOM_EMPTY_GRACE_MS = 30_000;
+
 // v0.3 — chests. Time-based (not kill-based like weapon drops) so they give
 // a different, explore-for-it rhythm; spawn on the same off-screen ring as
 // enemies so reaching one takes a deliberate detour.

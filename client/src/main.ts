@@ -72,6 +72,11 @@ const perkTreeScreen = new PerkTreeScreen(uiRoot, () => {
 // concurrently. Movement-only for M1 — no enemies/combat/xp sync yet.
 const multiplayerGame = new MultiplayerGame();
 let inMultiplayer = false;
+// M5 — Escape opens a confirm dialog instead of leaving instantly (one
+// stray keypress shouldn't drop you from a shared co-op run). While it's
+// open, zeroed input is sent every frame so the character doesn't keep
+// walking/firing on its last held input while you decide.
+let mpLeaveConfirmOpen = false;
 
 multiplayerGame.onLevelUp((offerIds) => {
   const offers = offerIds.map((id) => getPerkById(id)).filter((p): p is NonNullable<typeof p> => p !== undefined);
@@ -85,14 +90,35 @@ roomBadge.className = "mp-room-badge";
 roomBadge.style.display = "none";
 uiRoot.appendChild(roomBadge);
 
+const connStatusBadge = document.createElement("div");
+connStatusBadge.className = "mp-conn-status-badge";
+connStatusBadge.textContent = "Reconnecting…";
+connStatusBadge.style.display = "none";
+uiRoot.appendChild(connStatusBadge);
+
 function leaveMultiplayer(): void {
   multiplayerGame.disconnect();
   inMultiplayer = false;
+  mpLeaveConfirmOpen = false;
   roomBadge.style.display = "none";
+  connStatusBadge.style.display = "none";
+  multiplayerLeaveModal.hide();
   hud.setVisible(false);
   perkTray.setVisible(false);
   showMainMenu();
 }
+
+const multiplayerLeaveModal = new PauseModal(
+  uiRoot,
+  () => {
+    mpLeaveConfirmOpen = false;
+    multiplayerLeaveModal.hide();
+  },
+  () => {
+    leaveMultiplayer();
+  },
+  "LEAVE ROOM?",
+);
 
 const multiplayerScreen = new MultiplayerScreen(uiRoot, {
   onCreate: async (displayName) => {
@@ -305,8 +331,17 @@ function frame(now: number): void {
   const fireHeld = input.isFireHeld();
 
   if (inMultiplayer) {
-    if (input.consumeJustPressed("Escape")) leaveMultiplayer();
-    multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
+    if (input.consumeJustPressed("Escape")) {
+      mpLeaveConfirmOpen = !mpLeaveConfirmOpen;
+      if (mpLeaveConfirmOpen) multiplayerLeaveModal.show();
+      else multiplayerLeaveModal.hide();
+    }
+    connStatusBadge.style.display = multiplayerGame.connStatus === "disconnected" ? "block" : "none";
+    if (mpLeaveConfirmOpen) {
+      multiplayerGame.sendInput(dt, { x: 0, y: 0 }, { x: 0, y: 0 }, false);
+    } else {
+      multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
+    }
     const snapshot = multiplayerGame.latestSnapshot;
     if (snapshot) {
       renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);

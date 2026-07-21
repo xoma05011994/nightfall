@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 16 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(16);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(16);
+  it("has exactly 17 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(17);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(17);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -142,6 +142,13 @@ describe("PERKS", () => {
     expect(getPerkById("overload")!.requires).toEqual(["aura", "lightning"]);
     expect(getPerkById("stormConduit")!.requires).toEqual(["ignite", "lightning"]);
   });
+
+  it("chainLink perk increases chainLinkDamagePerTick and requires a party of 2+", () => {
+    const player = makePlayer();
+    getPerkById("chainLink")!.apply(player);
+    expect(player.chainLinkDamagePerTick).toBe(8);
+    expect(getPerkById("chainLink")!.minPartySize).toBe(2);
+  });
 });
 
 describe("rollPerkOffers", () => {
@@ -152,10 +159,11 @@ describe("rollPerkOffers", () => {
   });
 
   it("never offers more perks than are eligible in the pool", () => {
-    // With nothing picked yet, Wildfire/Overload/Storm Conduit are all
-    // gated out (their prerequisites aren't met), so the eligible pool is
-    // smaller than PERKS.length.
-    const gatedCount = PERKS.filter((p) => p.requires && p.requires.length > 0).length;
+    // With nothing picked yet and no default party size (solo), Wildfire/
+    // Overload/Storm Conduit are gated by unmet prerequisites and Chain
+    // Link is gated by minPartySize, so the eligible pool is smaller than
+    // PERKS.length.
+    const gatedCount = PERKS.filter((p) => (p.requires && p.requires.length > 0) || (p.minPartySize ?? 1) > 1).length;
     const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10);
     expect(offers).toHaveLength(PERKS.length - gatedCount);
   });
@@ -189,6 +197,21 @@ describe("rollPerkOffers", () => {
     const picked = [{ perk: getPerkById("damage")!, count: PERK_MAX_RANK }];
     const offers = rollPerkOffers(() => 0.9, picked, PERKS.length + 10);
     expect(offers.some((p) => p.id === "damage")).toBe(false);
+  });
+
+  it("excludes Chain Link when partySize is omitted (solo defaults to 1)", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10);
+    expect(offers.some((p) => p.id === "chainLink")).toBe(false);
+  });
+
+  it("excludes Chain Link for a party of exactly 1", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 1);
+    expect(offers.some((p) => p.id === "chainLink")).toBe(false);
+  });
+
+  it("offers Chain Link once the party has 2 or more connected players", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 2);
+    expect(offers.some((p) => p.id === "chainLink")).toBe(true);
   });
 });
 

@@ -30,6 +30,11 @@ export class MultiplayerGame {
   roomCode: string | null = null;
   connected = false;
   connectError: string | null = null;
+  // "disconnected" means the underlying WebSocket dropped — RivetKit keeps
+  // retrying automatically underneath (see ActorConnRaw.onClose's docs), we
+  // just surface it so the UI can show a "Reconnecting..." banner instead of
+  // silently freezing on the last snapshot.
+  connStatus: "idle" | "connecting" | "connected" | "disconnected" = "idle";
 
   async createRoom(displayName: string): Promise<string> {
     const mm = rivetClient.matchmaker.getOrCreate(["main"]);
@@ -68,6 +73,10 @@ export class MultiplayerGame {
       const payload = raw as { offerIds: string[] };
       this.onLevelUpCallback?.(payload.offerIds);
     });
+    this.conn.onStatusChange((status) => {
+      this.connStatus = status;
+    });
+    this.connStatus = this.conn.connStatus;
     this.connected = true;
   }
 
@@ -77,6 +86,7 @@ export class MultiplayerGame {
     this.connected = false;
     this.latestSnapshot = null;
     this.roomCode = null;
+    this.connStatus = "idle";
   }
 
   chooseUpgrade(perkId: string): void {

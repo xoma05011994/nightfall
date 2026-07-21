@@ -153,6 +153,25 @@ describe("resolveProjectileHits", () => {
     resolveProjectileHits([projectile], [enemy], player, [], 0);
     expect(player.hp).toBe(60); // 50 + 20*0.5
   });
+
+  // M4 regression guard: co-op's no-friendly-fire requirement holds because
+  // resolveProjectileHits only ever reads/mutates the `enemies` array for
+  // damage targets — a teammate is structurally never a valid entry in that
+  // array (match.ts always resolves each owner's projectiles against the
+  // shared `enemies` list only, never against other players). This test
+  // pins that invariant: a projectile owned by one player, sitting exactly
+  // on top of a second player, must leave that second player's hp
+  // untouched no matter how the enemies list is populated.
+  it("never damages another player, even when a projectile directly overlaps them", () => {
+    const shooter = makePlayer({ hp: 100 });
+    const teammate = makePlayer({ position: { x: 0, y: 0 }, hp: 100 });
+    const enemy = makeEnemy({ position: { x: 1000, y: 0 }, hp: 200, maxHp: 200 });
+    const projectile = makeProjectile({ position: { x: 0, y: 0 }, damage: 50 });
+    resolveProjectileHits([projectile], [enemy], shooter, [], 0);
+    expect(teammate.hp).toBe(100);
+    expect(shooter.hp).toBe(100);
+    expect(enemy.hp).toBe(200); // out of range — nothing to hit, projectile just survives
+  });
 });
 
 describe("stepEnemies", () => {

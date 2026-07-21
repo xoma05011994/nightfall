@@ -1,7 +1,7 @@
 # Nightfall (survivor-2d)
 
-2D top-down survival roguelite — v0.6 (in progress). Solo (fully local, no
-backend) plus co-op multiplayer via room codes (Endless mode only).
+2D top-down survival roguelite — v0.6. Solo (fully local, no backend) plus
+co-op multiplayer via room codes (Endless mode only).
 
 ## Workspaces
 
@@ -133,24 +133,35 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
     instantly (bypassing the normal offer/prerequisite flow), plus a live
     damage-dealt readout — for checking actual numbers instead of inferring
     them from a real run.
-  - **Multiplayer** (from the main menu, v0.6, in progress) — co-op Endless
-    in a room: create a room and share the 6-character code, or join one. Up
-    to 4 players. Server-authoritative at 20 ticks/sec: movement, enemy
-    spawning/AI, projectiles, status effects (ignite/aura), XP orbs, weapon
-    pickups, and chests are all fully simulated on the server and broadcast
-    every tick as one `MatchSnapshot`, reusing the exact same `shared/`
-    systems the solo path uses. XP and leveling are currently **per-player**
-    (each player's kills feed only their own xp/level) — shared/pooled party
-    XP lands in a later milestone. Level-up still offers each player their
-    own independently-rolled 3 perks, applied only to that player's build.
-    No friendly fire by construction (every damage path only ever targets
-    the `enemies` array, never other players — verified live: one player's
-    projectiles pass straight through another player's position without
-    affecting their hp). Weapon pickups auto-equip into an empty slot or
-    level up a held duplicate; if both slots are full the pickup is just
-    left on the ground (the slot-swap prompt isn't wired up for multiplayer
-    yet). No death/game-over flow yet — hp clamps at 0 and the player stays
-    playable. No pause or reconnect handling in co-op yet.
+  - **Multiplayer** (from the main menu) — co-op Endless in a room: create
+    a room and share the 6-character code, or join one. Up to 4 players.
+    Server-authoritative at 20 ticks/sec: movement, enemy spawning/AI,
+    projectiles, status effects, XP orbs, weapon pickups, and chests are all
+    fully simulated on the server and broadcast every tick as one
+    `MatchSnapshot`, reusing the exact same `shared/` systems the solo path
+    uses. XP is **pooled across the whole party** — one shared level/xp bar
+    that every player's HUD mirrors, so the party always levels up in the
+    same instant — but each player still rolls and picks their own
+    independent 3 perk offers, so builds diverge even though leveling is
+    synchronized. No friendly fire by construction (every damage path only
+    ever targets the `enemies` array, never other players — verified both
+    by an automated regression test and live: one player's projectiles pass
+    straight through another player's position without affecting their
+    hp). **Chain Link** is a new multiplayer-only perk (needs 2+ connected
+    players to even appear as an offer) — a laser drawn between each pair
+    of adjacent party members that damages any enemy caught between them,
+    ticking on the same cadence as Deadly Aura. Escape opens a leave-confirm
+    dialog rather than dropping you instantly (input freezes while it's
+    open so your character doesn't keep walking/firing on stale input); a
+    dropped connection auto-reconnects at the transport level and the match
+    keeps running for the rest of the party the whole time, with a
+    "Reconnecting…" banner shown while it's re-establishing — the room
+    itself only closes if it stays empty for 30 seconds, so a brief network
+    blip can't cost the party its room code. Weapon pickups auto-equip into
+    an empty slot or level up a held duplicate; if both slots are full the
+    pickup is just left on the ground (the slot-swap prompt isn't wired up
+    for multiplayer yet). No death/game-over flow yet — hp clamps at 0 and
+    the player stays playable.
 - The play area is bounded by a perimeter fence — no infinite wandering.
   Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
   rendering, camera follows the player without ever rotating.
@@ -200,14 +211,25 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   `chooseUpgrade` actions, a fixed 20Hz tick loop that runs the full
   simulation (movement, firing, projectile resolution partitioned by
   `ownerId` for correct per-owner life-steal, enemy AI/contact/projectiles
-  targeting the nearest connected player, status effects, per-player XP
-  orbs and level-up perk rolls, weapon pickups, chests, enemy/chest
-  spawning) and broadcasts one `snapshot` event per tick. Shared/pooled
-  party XP and reconnect handling land in later milestones.
+  targeting the nearest connected player, status effects, Chain Link,
+  pooled party XP with independent per-player perk rolls, weapon pickups,
+  chests, enemy/chest spawning) and broadcasts one `snapshot` event per
+  tick. Reconnects rejoin the same player record (build/level/position
+  survive); the room closes itself — via `matchmaker.closeRoom` — only
+  after `ROOM_EMPTY_GRACE_MS` (30s) with zero connected players, checked
+  once per tick rather than the instant the last connection drops, so a
+  brief reconnect blip can't delete the room code out from under a party
+  that's about to come right back.
+- `shared/src/systems/chainLink.ts` — the Chain Link perk's damage tick:
+  draws a laser (reusing the `LightningEffect` visual) between each pair of
+  adjacent connected players in connection order and damages any enemy
+  within `CHAIN_LINK_HIT_WIDTH` of a segment, deduped so an enemy caught
+  between multiple segments is only hit once per tick. Multiplayer-only,
+  called directly from `match.ts`'s tick loop.
 - `shared/tests/`, `client/tests/` — vitest unit tests per workspace (see
   `npm test`).
 
-## Known gaps (accepted for v0.6 M2)
+## Known gaps (accepted for v0.6)
 
 - No sound.
 - Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade
@@ -219,14 +241,13 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   procedural world (though the play area is bounded anyway).
 - Player identity/profile has no cloud sync — `localStorage` only, tied to
   one browser.
-- Co-op XP/leveling is per-player, not pooled across the party yet (M3).
-  "Chain Link" (a multiplayer-only perk that damages enemies via a laser
-  between party members) doesn't exist yet either (M4), nor does an explicit
-  automated no-friendly-fire regression test (M4) — only manually verified
-  so far.
-- Co-op has no pause, no reconnect handling, and no death/game-over flow
-  (hp clamps at 0, player stays playable) — all M5.
+- Co-op has no true pause (Escape just opens a leave-confirm — the shared
+  world can't be frozen for the rest of the party just because one player
+  hit a key) and no death/game-over flow (hp clamps at 0, player stays
+  playable indefinitely).
 - Multiplayer weapon pickups: if both extra slots are full, the pickup is
   just left on the ground — the slot-swap prompt from solo isn't wired up
   for co-op.
+- No host/non-host distinction in co-op — every connected player has equal
+  standing (there's no host-only action that would need one).
 - Local dev only; no cloud deployment config for the server yet.

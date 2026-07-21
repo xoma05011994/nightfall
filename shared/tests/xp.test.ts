@@ -38,4 +38,14 @@ describe("grantXp", () => {
     expect(player.xp).toBeLessThan(player.xpToNext);
     expect(player.xp).toBeGreaterThanOrEqual(0);
   });
+
+  // Co-op pools XP in a plain {xp,level,xpToNext} tracker rather than a full
+  // Player — grantXp only ever touches those three fields, so it works
+  // identically against either shape.
+  it("works against a plain XpProgress tracker, not just a full Player", () => {
+    const partyProgress = { xp: 0, level: 1, xpToNext: xpToNextForLevel(1) };
+    const result = grantXp(partyProgress, partyProgress.xpToNext);
+    expect(result.leveledUp).toBe(true);
+    expect(partyProgress.level).toBe(2);
+  });
 });

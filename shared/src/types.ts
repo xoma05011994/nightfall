@@ -79,6 +79,10 @@ export interface Player {
   auraAppliesIgnite: boolean; // Wildfire — needs igniteDamagePerTick > 0 (from Ignite) to matter
   auraTriggersLightning: boolean; // Overload — needs lightningChainDamage > 0 (from Chain Lightning) to matter
   goldMultiplier: number;
+  // Chain Link (multiplayer only, needs 2+ connected players to be offered)
+  // — contributes to the party's shared inter-player laser damage; see
+  // systems/chainLink.ts. Always 0 in solo.
+  chainLinkDamagePerTick: number;
 }
 
 export type EnemyType = "grunt" | "brute" | "shooter" | "boss";
@@ -205,6 +209,10 @@ export interface Perk {
   // gates synergy/capstone perks that would otherwise do nothing on their
   // own (see systems/perks.ts's doc comment).
   requires?: string[];
+  // Minimum connected party size for this perk to be offered — solo (party
+  // size 1) never sees it. Undefined/1 means no gate. Currently only used by
+  // Chain Link, which needs a second player to draw a laser to.
+  minPartySize?: number;
   apply: (player: Player) => void;
 }
 
