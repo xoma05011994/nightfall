@@ -16,8 +16,8 @@ export interface WeaponDef {
   magazineSize: number;
   reloadMs: number;
   color: string;
-  // Inner SVG markup (no <svg> wrapper) for a 24x24 viewBox icon, drawn with
-  // currentColor — used by the HUD weapon slots.
+  // Path to a raster icon (served from client/public/weapons/) — used by
+  // both the HUD weapon slots and world pickup rendering.
   icon: string;
   pickupLocked?: boolean; // true only for the pistol — can't be dropped or swapped out
   projectileSpeed?: number; // projectile | spread | explosive

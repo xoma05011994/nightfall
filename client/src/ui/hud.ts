@@ -61,9 +61,9 @@ export class Hud {
       </div>
       <div class="hud-bottom-center">
         <div class="hud-weapon-slots">
-          <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">Sidearm</span><span class="weapon-slot-level"></span></div>
-          <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
-          <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><svg class="weapon-slot-icon" viewBox="0 0 24 24"></svg><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">Sidearm</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
         </div>
         <div class="hud-ammo-track"><div class="hud-ammo-fill" style="width:100%"></div></div>
         <div class="hud-ammo-text">10 / 10</div>
@@ -102,8 +102,11 @@ export class Hud {
       el.classList.toggle("maxed", slot.maxed);
       const nameEl = el.querySelector(".weapon-slot-name");
       if (nameEl) nameEl.textContent = slot.name ?? "—";
-      const iconEl = el.querySelector(".weapon-slot-icon");
-      if (iconEl) iconEl.innerHTML = slot.icon ?? "";
+      const iconEl = el.querySelector(".weapon-slot-icon") as HTMLImageElement | null;
+      if (iconEl) {
+        iconEl.style.visibility = slot.icon ? "visible" : "hidden";
+        if (slot.icon && iconEl.src !== new URL(slot.icon, location.href).href) iconEl.src = slot.icon;
+      }
       const levelEl = el.querySelector(".weapon-slot-level");
       if (levelEl) levelEl.textContent = slot.name === null ? "" : slot.maxed ? "MAX" : `Lv${slot.level}`;
     });

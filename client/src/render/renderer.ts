@@ -473,7 +473,7 @@ export class Renderer {
       ctx.translate(pickup.position.x, pickup.position.y);
       ctx.shadowColor = def.color;
       ctx.shadowBlur = 14;
-      drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse * WEAPON_ICON_WORLD_SCALE, def.color);
+      drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse * WEAPON_ICON_WORLD_SCALE);
       ctx.restore();
     }
   }

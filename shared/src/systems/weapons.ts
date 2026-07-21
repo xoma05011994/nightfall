@@ -17,7 +17,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     projectileSpeed: 700,
     color: "#ffb347",
     pickupLocked: true,
-    icon: '<rect x="9" y="3" width="4" height="10" rx="1" fill="currentColor"/><path d="M9 13 L5 13 L5 20 L9 20 Z" fill="currentColor"/><rect x="7" y="14" width="6" height="2" fill="currentColor" opacity="0.6"/>',
+    icon: "/weapons/pistol.png",
   },
   shotgun: {
     id: "shotgun",
@@ -31,7 +31,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     pelletCount: 6,
     spreadRad: 0.5,
     color: "#ff8c42",
-    icon: '<rect x="2" y="10" width="18" height="4" rx="1" fill="currentColor"/><rect x="17" y="6" width="5" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="4" y="14" width="6" height="4" fill="currentColor" opacity="0.6"/>',
+    icon: "/weapons/shotgun.png",
   },
   assaultRifle: {
     id: "assaultRifle",
@@ -43,7 +43,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     reloadMs: 1800,
     projectileSpeed: 780,
     color: "#ffd23f",
-    icon: '<rect x="2" y="10" width="20" height="3" rx="1" fill="currentColor"/><rect x="9" y="13" width="3" height="7" fill="currentColor" opacity="0.8"/><rect x="4" y="7" width="6" height="3" fill="currentColor" opacity="0.6"/>',
+    icon: "/weapons/assaultRifle.png",
   },
   rpg: {
     id: "rpg",
@@ -57,7 +57,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     splashRadius: 90,
     splashDamage: 40,
     color: "#ff3b3b",
-    icon: '<rect x="3" y="10" width="12" height="5" rx="1" fill="currentColor"/><polygon points="15,8 22,12 15,16" fill="currentColor"/><rect x="6" y="15" width="3" height="6" fill="currentColor" opacity="0.6"/>',
+    icon: "/weapons/rpg.png",
   },
   laserCannon: {
     id: "laserCannon",
@@ -69,7 +69,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     reloadMs: 2400,
     beamRange: 500,
     color: "#4ee2ff",
-    icon: '<polygon points="2,15 20,9 20,15 2,20" fill="currentColor"/><circle cx="16" cy="12.5" r="3" fill="currentColor" opacity="0.6"/>',
+    icon: "/weapons/laserCannon.png",
   },
   flamethrower: {
     id: "flamethrower",
@@ -82,7 +82,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     coneRange: 180,
     coneAngleRad: 0.9,
     color: "#ff6a00",
-    icon: '<circle cx="7" cy="14" r="5" fill="currentColor" opacity="0.7"/><rect x="10" y="11" width="8" height="4" rx="1" fill="currentColor"/><polygon points="18,10 23,12.5 18,15" fill="currentColor" opacity="0.8"/>',
+    icon: "/weapons/flamethrower.png",
   },
 };
 

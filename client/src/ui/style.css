@@ -165,15 +165,15 @@
 .weapon-slot-icon {
   width: 70px;
   height: 70px;
-  color: #d8cfc2;
+  object-fit: contain;
 }
 
 .weapon-slot.equipped .weapon-slot-icon {
-  color: #c81e1e;
+  filter: drop-shadow(0 0 6px #c81e1e) drop-shadow(0 0 6px #c81e1e);
 }
 
 .weapon-slot.maxed .weapon-slot-icon {
-  color: #ffcf4a;
+  filter: drop-shadow(0 0 6px #ffcf4a) drop-shadow(0 0 6px #ffcf4a);
 }
 
 .weapon-slot-name {
