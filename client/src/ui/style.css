@@ -693,3 +693,28 @@
   font-size: 14px;
   font-style: italic;
 }
+
+.mp-ghost-banner {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px;
+  background: rgba(30, 40, 64, 0.82);
+  border: 1px solid #8fb4e8;
+  font-family: Georgia, "Times New Roman", serif;
+  text-align: center;
+  pointer-events: none;
+}
+
+.mp-ghost-title {
+  color: #dbe8ff;
+  font-size: 18px;
+  letter-spacing: 3px;
+}
+
+.mp-ghost-sub {
+  color: #9fb4d8;
+  font-size: 12px;
+  margin-top: 3px;
+}

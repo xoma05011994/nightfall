@@ -95,11 +95,18 @@ connStatusBadge.textContent = "Reconnecting…";
 connStatusBadge.style.display = "none";
 uiRoot.appendChild(connStatusBadge);
 
+const ghostBanner = document.createElement("div");
+ghostBanner.className = "mp-ghost-banner";
+ghostBanner.innerHTML = `<div class="mp-ghost-title">YOU ARE DOWNED</div><div class="mp-ghost-sub">Spectating — a teammate can bring you back with the Revive perk.</div>`;
+ghostBanner.style.display = "none";
+uiRoot.appendChild(ghostBanner);
+
 function leaveMultiplayer(): void {
   multiplayerGame.disconnect();
   inMultiplayer = false;
   roomBadge.style.display = "none";
   connStatusBadge.style.display = "none";
+  ghostBanner.style.display = "none";
   mpPauseModal.hide();
   multiplayerLobby.hide();
   hud.setVisible(false);
@@ -365,6 +372,7 @@ function frame(now: number): void {
     if (phase === "lobby") {
       multiplayerLobby.show();
       mpPauseModal.hide();
+      ghostBanner.style.display = "none";
       hud.setVisible(false);
       if (snapshot) {
         multiplayerLobby.update(
@@ -377,6 +385,7 @@ function frame(now: number): void {
     } else if (phase === "paused") {
       multiplayerLobby.hide();
       mpPauseModal.show();
+      ghostBanner.style.display = "none";
       hud.setVisible(true);
       if (input.consumeJustPressed("Escape")) multiplayerGame.resume();
       if (snapshot) {
@@ -388,12 +397,19 @@ function frame(now: number): void {
       multiplayerLobby.hide();
       mpPauseModal.hide();
       hud.setVisible(true);
+      const localPlayer = snapshot?.players.find((p) => p.id === multiplayerGame.playerId)?.player;
+      const isGhost = localPlayer?.isGhost ?? false;
+      ghostBanner.style.display = isGhost ? "block" : "none";
       if (input.consumeJustPressed("Escape")) multiplayerGame.pause();
-      if (input.consumeJustPressed("Digit1")) multiplayerGame.equipSlot(0);
-      if (input.consumeJustPressed("Digit2")) multiplayerGame.equipSlot(1);
-      if (input.consumeJustPressed("Digit3")) multiplayerGame.equipSlot(2);
-      if (input.consumeJustPressed("KeyR")) multiplayerGame.reload();
-      multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
+      // A downed player can still float around to spectate (movement is sent
+      // below), but weapon-switch/reload/fire do nothing while a ghost.
+      if (!isGhost) {
+        if (input.consumeJustPressed("Digit1")) multiplayerGame.equipSlot(0);
+        if (input.consumeJustPressed("Digit2")) multiplayerGame.equipSlot(1);
+        if (input.consumeJustPressed("Digit3")) multiplayerGame.equipSlot(2);
+        if (input.consumeJustPressed("KeyR")) multiplayerGame.reload();
+      }
+      multiplayerGame.sendInput(dt, moveVector, aimDir, isGhost ? false : fireHeld);
       if (snapshot) {
         renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
         updateMultiplayerHud(snapshot);

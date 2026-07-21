@@ -195,6 +195,18 @@ export const PERKS: Perk[] = [
       p.chainLinkDamagePerTick += 8;
     },
   },
+  {
+    id: "revive",
+    name: "Revive",
+    description: "Bring all downed teammates back to life — multiplayer only, offered only while someone's down",
+    icon: '<path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+    minPartySize: 2,
+    requiresDeadTeammate: true,
+    // The revive itself (bringing ghosts back) happens server-side in
+    // room.ts's chooseUpgrade handling — this apply is a no-op so the perk
+    // gives the reviver no personal stat buff.
+    apply: () => {},
+  },
 ];
 
 export function getPerkById(id: string): Perk | undefined {
@@ -211,10 +223,11 @@ export function perkTier(id: string): number {
 
 // Samples PERK_OFFER_COUNT distinct perks without replacement, excluding any
 // perk whose prerequisites (`requires`) aren't fully met yet, that's already
-// been picked PERK_MAX_RANK times, or whose `minPartySize` exceeds the
-// current connected party (partySize defaults to 1 — solo never sees
-// multiplayer-only perks like Chain Link without a caller opting in).
-export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: number }[] = [], count: number = PERK_OFFER_COUNT, partySize: number = 1): Perk[] {
+// been picked PERK_MAX_RANK times, whose `minPartySize` exceeds the current
+// connected party (partySize defaults to 1 — solo never sees multiplayer-only
+// perks like Chain Link without a caller opting in), or that
+// `requiresDeadTeammate` while no teammate is currently downed (Revive).
+export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: number }[] = [], count: number = PERK_OFFER_COUNT, partySize: number = 1, hasReviveTarget: boolean = false): Perk[] {
   const pickedIds = new Set(picked.map((p) => p.perk.id));
   const rankById = new Map(picked.map((p) => [p.perk.id, p.count]));
 
@@ -222,6 +235,7 @@ export function rollPerkOffers(rng: () => number, picked: { perk: Perk; count: n
     if ((rankById.get(perk.id) ?? 0) >= PERK_MAX_RANK) return false;
     if (perk.requires && !perk.requires.every((id) => pickedIds.has(id))) return false;
     if (perk.minPartySize && partySize < perk.minPartySize) return false;
+    if (perk.requiresDeadTeammate && !hasReviveTarget) return false;
     return true;
   });
 

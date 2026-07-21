@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 17 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(17);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(17);
+  it("has exactly 18 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(18);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(18);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -149,6 +149,16 @@ describe("PERKS", () => {
     expect(player.chainLinkDamagePerTick).toBe(8);
     expect(getPerkById("chainLink")!.minPartySize).toBe(2);
   });
+
+  it("revive perk is gated on a 2+ party AND a downed teammate, and buffs the picker's stats not at all", () => {
+    const revive = getPerkById("revive")!;
+    expect(revive.minPartySize).toBe(2);
+    expect(revive.requiresDeadTeammate).toBe(true);
+    const before = makePlayer();
+    const after = makePlayer();
+    revive.apply(after);
+    expect(after).toEqual(before); // apply is a no-op — the revive happens server-side
+  });
 });
 
 describe("rollPerkOffers", () => {
@@ -212,6 +222,21 @@ describe("rollPerkOffers", () => {
   it("offers Chain Link once the party has 2 or more connected players", () => {
     const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 2);
     expect(offers.some((p) => p.id === "chainLink")).toBe(true);
+  });
+
+  it("excludes Revive when no teammate is downed, even in a 2+ party", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 2, false);
+    expect(offers.some((p) => p.id === "revive")).toBe(false);
+  });
+
+  it("excludes Revive solo even if a (nonexistent) teammate were flagged down", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 1, true);
+    expect(offers.some((p) => p.id === "revive")).toBe(false);
+  });
+
+  it("offers Revive when a teammate is downed in a 2+ party", () => {
+    const offers = rollPerkOffers(() => 0.9, [], PERKS.length + 10, 2, true);
+    expect(offers.some((p) => p.id === "revive")).toBe(true);
   });
 });
 

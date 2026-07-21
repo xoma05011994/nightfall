@@ -160,25 +160,51 @@ export class Renderer {
   private drawRemotePlayer(snapshot: PlayerSnapshot, nowMs: number): void {
     const ctx = this.ctx;
     const player = snapshot.player;
-    const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
+    if (player.isGhost) {
+      this.drawGhost(player, nowMs);
+    } else {
+      const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
+      ctx.save();
+      ctx.shadowColor = "#4ee2ff";
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = "#1c5c6e";
+      ctx.beginPath();
+      ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "#d8cfc2";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
-    ctx.shadowColor = "#4ee2ff";
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "#1c5c6e";
+    ctx.fillStyle = player.isGhost ? "rgba(200, 220, 255, 0.55)" : "#d8cfc2";
+    ctx.font = "12px Georgia";
+    ctx.textAlign = "center";
+    const label = player.isGhost ? `${snapshot.displayName} (ghost)` : snapshot.displayName;
+    ctx.fillText(label, player.position.x, player.position.y - player.radius - 10);
+    ctx.restore();
+  }
+
+  // A downed player: a translucent, faintly pulsing wisp — clearly "not
+  // really here" versus a living player's solid disc.
+  private drawGhost(player: Player, nowMs: number): void {
+    const ctx = this.ctx;
+    const pulse = 1 + Math.sin(nowMs / 400) * 0.12;
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.shadowColor = "#bcd4ff";
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = "#8fb4e8";
     ctx.beginPath();
     ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#d8cfc2";
-    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = "#dbe8ff";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.restore();
-
-    ctx.save();
-    ctx.fillStyle = "#d8cfc2";
-    ctx.font = "12px Georgia";
-    ctx.textAlign = "center";
-    ctx.fillText(snapshot.displayName, player.position.x, player.position.y - player.radius - 10);
     ctx.restore();
   }
 
@@ -238,6 +264,10 @@ export class Renderer {
 
   private drawPlayer(player: Player, nowMs: number): void {
     const ctx = this.ctx;
+    if (player.isGhost) {
+      this.drawGhost(player, nowMs);
+      return;
+    }
     const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
     ctx.save();
     ctx.shadowColor = "#c81e1e";

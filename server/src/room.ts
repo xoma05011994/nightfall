@@ -157,6 +157,12 @@ export class Room {
     return this.connectedEntries()[0]?.[0] ?? "";
   }
 
+  // True when a connected teammate is currently downed — gates whether the
+  // Revive perk is offered.
+  private hasConnectedGhost(): boolean {
+    return this.connectedEntries().some(([, r]) => r.player.isGhost);
+  }
+
   // Returns an error reason if the connection should be rejected, else null.
   addPlayer(playerId: string, displayName: string, ws: WebSocket): string | null {
     const existing = this.players.get(playerId);
@@ -201,6 +207,16 @@ export class Room {
       const perk = offers.find((o) => o.id === msg.payload.perkId);
       if (!perk) return;
       perk.apply(rec.player);
+      // Revive is special: it brings every downed teammate back at half hp,
+      // respawned on top of the reviver (apply() itself is a no-op).
+      if (perk.id === "revive") {
+        for (const [, other] of this.players) {
+          if (!other.player.isGhost) continue;
+          other.player.isGhost = false;
+          other.player.hp = Math.max(1, Math.round(other.player.maxHp * 0.5));
+          other.player.position = { ...rec.player.position };
+        }
+      }
       const existing = rec.pickedPerks.find((p) => p.perk.id === perk.id);
       if (existing) existing.count += 1;
       else rec.pickedPerks.push({ perk, count: 1 });
@@ -248,8 +264,12 @@ export class Room {
     }
     if (!leveledUp) return;
     const partySize = this.countConnected();
+    const hasReviveTarget = this.hasConnectedGhost();
     for (const [, rec] of this.connectedEntries()) {
-      const offers = rollPerkOffers(this.rng, rec.pickedPerks, undefined, partySize);
+      // Ghosts don't level up (they collect no XP), but guard anyway — a
+      // downed player shouldn't be handed a perk choice.
+      if (rec.player.isGhost) continue;
+      const offers = rollPerkOffers(this.rng, rec.pickedPerks, undefined, partySize, hasReviveTarget);
       rec.pendingOffers = offers;
       if (rec.ws) this.send(rec.ws, { type: "levelUp", payload: { offerIds: offers.map((o) => o.id) } });
     }
@@ -318,7 +338,7 @@ export class Room {
       this.pushRewardPopup(p.position, "magnet", "Magnet!", nowMs);
     } else {
       this.pushRewardPopup(p.position, "perk", "Perk!", nowMs);
-      const offers = rollPerkOffers(this.rng, rec.pickedPerks, undefined, this.countConnected());
+      const offers = rollPerkOffers(this.rng, rec.pickedPerks, undefined, this.countConnected(), this.hasConnectedGhost());
       rec.pendingOffers = offers;
       if (rec.ws) this.send(rec.ws, { type: "levelUp", payload: { offerIds: offers.map((o) => o.id) } });
     }
@@ -367,6 +387,7 @@ export class Room {
     for (const [playerId, rec] of connected) {
       const input = rec.input;
       const p = rec.player;
+      if (p.isGhost) continue; // ghosts can float but can't fire
       if (!input?.fireHeld) continue;
       if (Math.hypot(input.aimX, input.aimY) < 1e-6) continue;
       const instance = p.weaponSlots[p.equippedSlot];
@@ -424,9 +445,15 @@ export class Room {
     }
     this.projectiles = nextProjectiles;
 
-    // 4. Enemy AI (targets nearest connected player), contact damage,
-    // enemy projectiles.
-    const playerObjs = connected.map(([, r]) => r.player);
+    // Ghosts (downed players) float around to spectate but are excluded from
+    // every combat interaction below — enemies ignore them, they take no
+    // damage, and they collect nothing. Recomputed after the death check so a
+    // player who dies this tick immediately drops out of the later steps.
+    let living = connected.filter(([, r]) => !r.player.isGhost);
+
+    // 4. Enemy AI (targets nearest living player), contact damage, enemy
+    // projectiles — all against living players only.
+    const playerObjs = living.map(([, r]) => r.player);
     if (playerObjs.length > 0) {
       this.nextEnemyProjectileId = stepEnemies(
         this.enemies,
@@ -441,61 +468,67 @@ export class Room {
       this.enemyProjectiles = resolveEnemyProjectileHits(this.enemyProjectiles, playerObjs);
     }
 
-    // 5. Status effects (ignite/aura) — per player, against shared enemies.
-    for (const [, rec] of connected) {
+    // Death: a living player whose hp hit 0 becomes a ghost (spectating).
+    // No respawn except via a teammate's Revive perk.
+    for (const [, rec] of living) {
+      if (rec.player.hp <= 0) {
+        rec.player.hp = 0;
+        rec.player.isGhost = true;
+      }
+    }
+    living = connected.filter(([, r]) => !r.player.isGhost);
+
+    // 5. Status effects (ignite/aura) — living players only, against shared
+    // enemies.
+    for (const [, rec] of living) {
       this.handleDeadEnemies(stepBurningEnemies(rec.player, this.enemies, dt), rec);
       this.handleDeadEnemies(stepAura(rec.player, this.enemies, dt, this.lightningEffects, nowMs), rec);
     }
 
     // 5b. Chain Link (multiplayer-only) — party-wide, not per-player: one
-    // shared tick timer, damage pooled from every connected player who
-    // picked it, laser drawn between each pair of adjacent connected
-    // players in connection order.
-    if (connected.length >= 2) {
+    // shared tick timer, damage pooled from every living player who picked
+    // it, laser drawn between each pair of adjacent living players.
+    if (living.length >= 2) {
       this.chainLinkTickTimerMs -= dt * 1000;
       if (this.chainLinkTickTimerMs <= 0) {
         this.chainLinkTickTimerMs += CHAIN_LINK_TICK_MS;
-        const chainLinkDamage = connected.reduce((sum, [, rec]) => sum + rec.player.chainLinkDamagePerTick, 0);
+        const chainLinkDamage = living.reduce((sum, [, rec]) => sum + rec.player.chainLinkDamagePerTick, 0);
         if (chainLinkDamage > 0) {
-          const positions = connected.map(([, rec]) => rec.player.position);
+          const positions = living.map(([, rec]) => rec.player.position);
           this.handleChainLinkKills(stepChainLink(positions, chainLinkDamage, this.enemies, this.lightningEffects, nowMs));
         }
       }
     }
 
-    // 6. XP orbs — per player, sequential calls so an orb collected by one
-    // player is removed before the next player's call can see it (no
-    // double-collection). Collection is still per-player (whoever walks
-    // over the orb), but the XP itself feeds the shared party pool.
-    for (const [, rec] of connected) {
+    // 6. XP orbs — living players only, sequential calls so an orb collected
+    // by one player is removed before the next player's call can see it (no
+    // double-collection). The XP feeds the shared party pool.
+    for (const [, rec] of living) {
       const { survivingOrbs, xpCollected } = stepXpOrbs(this.xpOrbs, rec.player, dt);
       this.xpOrbs = survivingOrbs;
       if (xpCollected > 0) this.grantPartyXpAndCheckLevelUp(xpCollected);
     }
 
-    // No death/game-over flow for co-op yet — clamp at 0 so hp can't go
-    // negative, but players stay "alive" and playable.
-    for (const [, rec] of connected) {
-      if (rec.player.hp < 0) rec.player.hp = 0;
-    }
-
-    // 7. Weapon pickups + chests — per player, sequential (same
+    // 7. Weapon pickups + chests — living players only, sequential (same
     // no-double-pickup reasoning as XP orbs).
-    for (const [, rec] of connected) {
+    for (const [, rec] of living) {
       const touched = findTouchedPickup(this.weaponPickups, rec.player);
       if (touched) this.handleTouchedPickup(rec, touched);
     }
-    for (const [, rec] of connected) {
+    for (const [, rec] of living) {
       const touchedChest = findTouchedChest(this.chests, rec.player);
       if (touchedChest) this.handleTouchedChest(rec, touchedChest, nowMs);
     }
 
-    // 8. Spawn enemies/chests around a random connected player.
-    if (connected.length > 0) {
+    // 8. Spawn enemies/chests around a random living player (or any connected
+    // player if the whole party is currently downed, so the world doesn't
+    // freeze while ghosts wait for a revive).
+    const spawnAnchors = living.length > 0 ? living : connected;
+    if (spawnAnchors.length > 0) {
       this.spawnTimerMs -= dt * 1000;
       if (this.spawnTimerMs <= 0) {
         this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
-        const anchor = connected[Math.floor(this.rng() * connected.length)]![1].player.position;
+        const anchor = spawnAnchors[Math.floor(this.rng() * spawnAnchors.length)]![1].player.position;
         const pos = spawnPositionAround(anchor, this.rng);
         const type = pickEnemyType(this.elapsedMs, this.rng);
         this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
@@ -504,7 +537,7 @@ export class Room {
       this.chestSpawnTimerMs -= dt * 1000;
       if (this.chestSpawnTimerMs <= 0) {
         this.chestSpawnTimerMs = CHEST_SPAWN_INTERVAL_MS;
-        const anchor = connected[Math.floor(this.rng() * connected.length)]![1].player.position;
+        const anchor = spawnAnchors[Math.floor(this.rng() * spawnAnchors.length)]![1].player.position;
         const pos = spawnPositionAround(anchor, this.rng);
         this.chests.push(spawnChest(this.nextChestId++, clampToWorldBounds(pos, 0)));
       }

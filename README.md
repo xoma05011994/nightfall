@@ -154,18 +154,25 @@ fetch/XHR are).
     hp). **Chain Link** is a new multiplayer-only perk (needs 2+ connected
     players to even appear as an offer) — a laser drawn between each pair
     of adjacent party members that damages any enemy caught between them,
-    ticking on the same cadence as Deadly Aura. Escape opens a leave-confirm
-    dialog rather than dropping you instantly (input freezes while it's
-    open so your character doesn't keep walking/firing on stale input); a
-    dropped connection auto-reconnects at the transport level and the match
-    keeps running for the rest of the party the whole time, with a
-    "Reconnecting…" banner shown while it's re-establishing — the room
-    itself only closes if it stays empty for 30 seconds, so a brief network
-    blip can't cost the party its room code. Weapon pickups auto-equip into
-    an empty slot or level up a held duplicate; if both slots are full the
-    pickup is just left on the ground (the slot-swap prompt isn't wired up
-    for multiplayer yet). No death/game-over flow yet — hp clamps at 0 and
-    the player stays playable.
+    ticking on the same cadence as Deadly Aura. Creating a room opens a
+    **lobby** (players gather, no enemies) with a START GAME button for the
+    host; the run only begins when the host starts it. Any player's Escape
+    **pauses the whole party** server-side — everyone sees a GAME PAUSED
+    overlay and the simulation freezes until someone resumes. When a
+    player's hp hits 0 they **go down and become a ghost** — a translucent
+    wisp that can still float around to spectate but is excluded from all
+    combat (can't fire, isn't targeted, takes no damage, collects nothing).
+    A downed teammate can be brought back by the **Revive** perk, a
+    multiplayer-only perk offered only while someone's down; picking it
+    revives every ghost teammate at half HP on top of the reviver. A dropped
+    connection auto-reconnects at the transport level and the match keeps
+    running for the rest of the party the whole time, with a "Reconnecting…"
+    banner shown while it's re-establishing — the room itself only closes if
+    it stays empty for 30 seconds, so a brief network blip can't cost the
+    party its room code. Weapon pickups auto-equip into an empty slot or
+    level up a held duplicate; if both slots are full the pickup is just
+    left on the ground (the slot-swap prompt isn't wired up for multiplayer
+    yet).
 - The play area is bounded by a perimeter fence — no infinite wandering.
   Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
   rendering, camera follows the player without ever rotating.
@@ -250,15 +257,16 @@ fetch/XHR are).
   procedural world (though the play area is bounded anyway).
 - Player identity/profile has no cloud sync — `localStorage` only, tied to
   one browser.
-- Co-op has no true pause (Escape just opens a leave-confirm — the shared
-  world can't be frozen for the rest of the party just because one player
-  hit a key) and no death/game-over flow (hp clamps at 0, player stays
-  playable indefinitely).
+- Co-op has no whole-party-wipe resolution: if *every* player goes down at
+  once there's no one left to trigger a Revive and no XP is coming in, so
+  the run is effectively stuck (ghosts spectate an unwinnable field until
+  someone leaves to the menu). A proper game-over/restart for a full wipe
+  isn't implemented yet.
 - Multiplayer weapon pickups: if both extra slots are full, the pickup is
   just left on the ground — the slot-swap prompt from solo isn't wired up
   for co-op.
-- No host/non-host distinction in co-op — every connected player has equal
-  standing (there's no host-only action that would need one).
+- Co-op host is just "longest-connected player" (gets the lobby's START
+  GAME); there's no explicit host transfer UI or other host-only powers.
 - Server has zero persistence — a process restart loses every live room
   (players reconnect fresh, no build/level continuity). Acceptable at this
   scale; would need a real datastore to fix.

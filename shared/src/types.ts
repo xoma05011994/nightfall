@@ -83,6 +83,11 @@ export interface Player {
   // — contributes to the party's shared inter-player laser damage; see
   // systems/chainLink.ts. Always 0 in solo.
   chainLinkDamagePerTick: number;
+  // Multiplayer only — set when hp hits 0 in co-op. A ghost can still float
+  // around to spectate but is excluded from all combat (can't fire, isn't
+  // targeted, takes no damage, collects nothing) until a teammate picks the
+  // Revive perk. Always false in solo (solo has its own game-over flow).
+  isGhost: boolean;
 }
 
 export type EnemyType = "grunt" | "brute" | "shooter" | "boss";
@@ -213,6 +218,11 @@ export interface Perk {
   // size 1) never sees it. Undefined/1 means no gate. Currently only used by
   // Chain Link, which needs a second player to draw a laser to.
   minPartySize?: number;
+  // Multiplayer only — this perk is only offered when a teammate is
+  // currently downed (a ghost). Used by Revive, which is pointless with no
+  // one to bring back. The revive itself is applied server-side (see
+  // room.ts's chooseUpgrade handling), not in `apply`.
+  requiresDeadTeammate?: boolean;
   apply: (player: Player) => void;
 }
 
