@@ -2,15 +2,31 @@ import { INPUT_SEND_HZ } from "@nightfall/shared/constants";
 import type { ClientMessage, MatchSnapshot, ServerMessage } from "@nightfall/shared/multiplayer";
 import type { Vec2 } from "@nightfall/shared/types";
 
+// Normalizes whatever form VITE_WS_URL is set to into a valid WebSocket URL
+// pointed at the server's /ws mount. Accepts a bare host
+// ("my-app.railway.app"), an http(s):// URL (copied from a browser bar), or
+// an already-correct ws(s):// URL, with or without the /ws path — so the env
+// var can just be the domain the host platform shows you. The server only
+// ever listens on /ws (see server/src/index.ts), so forcing that path is
+// always correct for this project.
+function normalizeWsUrl(raw: string): string {
+  let url = raw.trim();
+  if (url.startsWith("https://")) url = "wss://" + url.slice("https://".length);
+  else if (url.startsWith("http://")) url = "ws://" + url.slice("http://".length);
+  else if (!url.startsWith("ws://") && !url.startsWith("wss://")) url = "wss://" + url;
+  url = url.replace(/\/+$/, "");
+  if (!url.endsWith("/ws")) url = url + "/ws";
+  return url;
+}
+
 // Local dev: plain Node server on Windows natively (no more WSL — dropping
 // RivetKit dropped the native-binary requirement that needed it). Port 8080
 // matches the server's own default (see server/src/index.ts).
-// Production: set VITE_WS_URL at build time to the deployed server's wss://
-// URL (e.g. Railway's public domain + /ws) — no default baked in since we
-// don't want to guess a wrong one; connecting without it set fails clearly
-// instead of silently pointing somewhere wrong.
-const DEFAULT_WS_URL = import.meta.env.DEV ? "ws://localhost:8080/ws" : undefined;
-const WS_URL = import.meta.env.VITE_WS_URL ?? DEFAULT_WS_URL;
+// Production: set VITE_WS_URL at build time to the deployed server's host
+// (e.g. Railway's public domain). No default baked in for prod — connecting
+// without it set fails clearly instead of silently pointing somewhere wrong.
+const RAW_WS_URL = import.meta.env.VITE_WS_URL ?? (import.meta.env.DEV ? "ws://localhost:8080/ws" : undefined);
+const WS_URL = RAW_WS_URL ? normalizeWsUrl(RAW_WS_URL) : undefined;
 
 const RECONNECT_DELAY_MS = 2000;
 
