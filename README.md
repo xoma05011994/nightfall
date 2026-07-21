@@ -1,16 +1,63 @@
 # Nightfall (survivor-2d)
 
-2D top-down survival roguelite — v0.5.1. Single-player, no backend.
+2D top-down survival roguelite — v0.6 (in progress). Solo (fully local, no
+backend) plus co-op multiplayer via room codes (Endless mode only).
+
+## Workspaces
+
+npm workspaces monorepo:
+
+- `shared/` — pure game-logic modules (types, constants, math, `systems/*`)
+  used by both `client/` and `server/`. No DOM or `rivetkit` imports except
+  where a module is genuinely browser-only (e.g. `systems/profile.ts`'s
+  `localStorage` — solo/Adventure-only, never touched by the server).
+- `client/` — Vite frontend. Solo play (`game/Game.ts`) runs fully locally
+  with zero network dependency. Multiplayer (`net/MultiplayerGame.ts`) is a
+  separate, thin client that sends input and renders server snapshots — the
+  two never run concurrently.
+- `server/` — RivetKit actors (`matchmaker`, `match`) for co-op Endless rooms.
 
 ## Dev workflow
 
 ```
-npm install
-npm run dev         # Vite dev server on localhost:5175
-npm run typecheck
-npm test             # vitest, pure-logic unit tests
-npm run build         # typecheck + production build
+npm install                # from survivor-2d/, installs all workspaces
+npm run dev                 # Vite dev server on localhost:5175 (client)
+npm run typecheck            # all three workspaces
+npm test                      # vitest, all three workspaces
+npm run build                  # typecheck + production build (client)
 ```
+
+Solo play needs only `npm run dev`. Multiplayer additionally needs the
+RivetKit server running (see below) — open `http://localhost:5175` in
+multiple browser tabs to test a room locally (one tab creates a room and
+shares the code, others join with it).
+
+### Windows note: the multiplayer server must run under WSL
+
+`rivetkit@2.3.4+`'s native runtime has no published `.node` binary for
+Windows, and the WASM fallback's local-engine-spawn path isn't compatible
+with the WASM runtime on this version — the same constraint already
+documented for this repo's earlier 3D prototype. The Linux native binary
+works correctly, so on Windows the **server** runs under WSL while the
+**client** (Vite) runs natively on Windows:
+
+- A WSL-native working copy lives at `~/survivor-2d` inside the WSL distro
+  (its own `node_modules` — do not run `npm install` for the server
+  workspace cross-filesystem from `/mnt/...`, both for native-binary
+  correctness and performance).
+- `~/sync-survivor-2d.sh` copies `server/src` and `shared/src` from the
+  Windows-mounted repo into that working copy (symlinks don't work here —
+  Node resolves symlinks to their real path for module resolution, which
+  would pull in the broken Windows `node_modules` instead). Re-run it after
+  editing server or shared source before restarting the server — the
+  `.claude/launch.json` `survivor-2d-server` entry already does this
+  automatically on every start.
+- `.claude/launch.json`'s `survivor-2d-server` entry runs
+  `wsl.exe -d Ubuntu -- bash -c "~/sync-survivor-2d.sh && cd ~/survivor-2d/server && npx tsx --watch src/index.ts"`
+  on port 6420 (RivetKit's own default).
+
+On Linux/macOS this workaround isn't needed — `npm run dev:server` from
+`server/` (after `npm install` at the repo root) works directly.
 
 ## Concept
 
@@ -86,40 +133,63 @@ npm run build         # typecheck + production build
     instantly (bypassing the normal offer/prerequisite flow), plus a live
     damage-dealt readout — for checking actual numbers instead of inferring
     them from a real run.
+  - **Multiplayer** (from the main menu, v0.6, in progress) — co-op Endless
+    in a room: create a room and share the 6-character code, or join one.
+    Up to 4 players. Currently movement-only (M1) — server-authoritative
+    position sync at 20 ticks/sec, client-predicted local movement, remote
+    players interpolated from snapshots. Enemies/combat/loot land in later
+    milestones, along with shared/pooled party XP (everyone levels up
+    together, each player independently rolls their own perk offers) and a
+    "Chain Link" perk that damages enemies via a laser between party
+    members. No friendly fire by construction (player damage only ever
+    targets the `enemies` array, never other players).
 - The play area is bounded by a perimeter fence — no infinite wandering.
   Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
   rendering, camera follows the player without ever rotating.
 
 ## Structure
 
-- `src/types.ts`, `src/constants.ts`, `src/math.ts` — shared types, tuning
-  values, and vector/geometry helpers.
-- `src/systems/` — pure, unit-tested game logic: collision, combat
+- `shared/src/types.ts`, `constants.ts`, `math.ts` — shared types, tuning
+  values, and vector/geometry helpers. `multiplayer.ts` — room-code helpers
+  and the client/server DTOs (`PlayerInputDTO`, `MatchSnapshot`).
+- `shared/src/systems/` — pure, unit-tested game logic: collision, combat
   (projectile movement/hits/splash/pierce, enemy movement/contact damage),
   `weapons.ts` (weapon defs + fire modes + ammo/reload), `weaponDrops.ts`
   (drop rolling + pickup detection), `chests.ts` (reward rolling + pickup
   detection), `statusEffects.ts` (ignite/lightning-chain/aura),
   `world.ts` (bounds clamping), `levels.ts` (the 10 pre-generated Adventure
-  levels), `profile.ts` (persisted coins/weapon-upgrades), spawner
-  (grunts + bosses), xp/leveling, perks.
-- `src/game/Game.ts` — orchestrates the systems into one
+  levels), `profile.ts` (persisted coins/weapon-upgrades, solo-only), spawner
+  (grunts + bosses), xp/leveling, perks. Used by both `client/` (solo +
+  multiplayer prediction/rendering) and `server/` (authoritative sim).
+- `client/src/game/Game.ts` — the **solo** orchestrator: one
   `update(dt, moveVector, aimDir, fireHeld, nowMs)` per frame, plus discrete
   actions (`equipSlot`, `reloadEquipped`, `applyPerk`, `resolveWeaponPrompt`,
   `pause`/`resume`/`leaveToMenu`, and the `sandbox*` methods used only by
   Sandbox mode). `start(mode, levelDef?, weaponUpgrades?)` resets a run;
-  Adventure mode reseeds the RNG from the level's own seed.
-- `src/render/renderer.ts` — Canvas2D world rendering (ground texture, fence,
-  entities, chests, weapon pickups, beam/cone/aura effects, vignette,
-  per-level color palette). No DOM.
-- `src/ui/` — DOM overlay: HUD (health/xp/timer/weapon slots/ammo/gold),
-  perk tray, main menu, level-select screen, armory (shop) screen, level-up
-  perk modal, weapon-pickup slot-choice modal, pause modal, sandbox panel,
-  perk tree screen, results screen (win or lose).
-- `tests/` — vitest unit tests for the `systems/` modules and `Game`'s
-  orchestration logic (weapon pickups, chests, adventure timing, weapon
-  upgrades, level seeding, pause, sandbox mode).
+  Adventure mode reseeds the RNG from the level's own seed. Fully local, no
+  network calls.
+- `client/src/net/` — the **multiplayer** client: `rivetClient.ts` wraps
+  `createClient<typeof registry>()`; `MultiplayerGame.ts` owns the
+  connection, sends capped-rate input, and exposes the latest server
+  snapshot.
+- `client/src/render/renderer.ts` — Canvas2D world rendering. `render()` for
+  solo (ground texture, fence, entities, chests, pickups, beam/cone/aura
+  effects, vignette, per-level palette); `renderMultiplayer()` for the co-op
+  movement-only view. No DOM.
+- `client/src/ui/` — DOM overlay: HUD, perk tray, main menu, level-select
+  screen, armory (shop) screen, level-up perk modal, weapon-pickup
+  slot-choice modal, pause modal, sandbox panel, perk tree screen,
+  multiplayer room screen, results screen (win or lose).
+- `server/src/actors/matchmaker.ts` — room-code create/resolve/close
+  (in-memory `c.state`, opportunistic staleness pruning on create).
+- `server/src/actors/match.ts` — one per co-op room: `connect`/`setInput`
+  actions, a fixed 20Hz tick loop that integrates player movement and
+  broadcasts a `snapshot` event. Movement-only for now (M1) — enemies,
+  combat, loot, and shared XP land in later milestones.
+- `shared/tests/`, `client/tests/` — vitest unit tests per workspace (see
+  `npm test`).
 
-## Known gaps (accepted for v0.5.1)
+## Known gaps (accepted for v0.6 M1)
 
 - No sound.
 - Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade
@@ -131,3 +201,6 @@ npm run build         # typecheck + production build
   procedural world (though the play area is bounded anyway).
 - Player identity/profile has no cloud sync — `localStorage` only, tied to
   one browser.
+- Multiplayer is movement-only so far — no enemies, combat, loot, XP, perks,
+  pause, or reconnect handling yet in co-op (all solo-only for now). Local
+  dev only; no cloud deployment config for the server yet.

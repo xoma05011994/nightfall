@@ -130,3 +130,23 @@ export const SHOOTER_PROJECTILE_RADIUS = 7;
 export const SHOOTER_PROJECTILE_TTL_MS = 3500;
 export const SHOOTER_FIRE_COOLDOWN_MS = 2200;
 export const SHOOTER_PROJECTILE_COLOR = "#b23fff";
+
+// v0.6 — co-op multiplayer (Endless-only). Room codes exclude visually
+// ambiguous characters (0/O, 1/I/L) since they're meant to be read aloud or
+// typed by hand.
+export const MAX_PARTY_SIZE = 4;
+export const ROOM_CODE_LENGTH = 6;
+export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+export function isValidRoomCode(code: string): boolean {
+  if (code.length !== ROOM_CODE_LENGTH) return false;
+  for (const char of code) {
+    if (!ROOM_CODE_ALPHABET.includes(char)) return false;
+  }
+  return true;
+}
+
+export const MATCH_TICK_HZ = 20;
+export const MATCH_TICK_MS = 1000 / MATCH_TICK_HZ;
+// Client sends setInput at this rate (also 20Hz — one input per tick).
+export const INPUT_SEND_HZ = 20;

@@ -11,8 +11,10 @@ import { WeaponPromptModal } from "./ui/weaponPromptModal";
 import { PauseModal } from "./ui/pauseModal";
 import { SandboxPanel } from "./ui/sandboxPanel";
 import { PerkTreeScreen } from "./ui/perkTreeScreen";
+import { MultiplayerScreen } from "./ui/multiplayerScreen";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
+import { MultiplayerGame } from "./net/MultiplayerGame";
 import { LEVELS } from "@nightfall/shared/systems/levels";
 import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
 import { WEAPON_DEFS, isWeaponMaxLevel } from "@nightfall/shared/systems/weapons";
@@ -62,6 +64,57 @@ const pauseModal = new PauseModal(
 const perkTreeScreen = new PerkTreeScreen(uiRoot, () => {
   perkTreeScreen.hide();
   showMainMenu();
+});
+
+// v0.6 M1 — co-op Endless. inMultiplayer gates frame() between the solo
+// Game loop and the multiplayer send/render loop; they never run
+// concurrently. Movement-only for M1 — no enemies/combat/xp sync yet.
+const multiplayerGame = new MultiplayerGame();
+let inMultiplayer = false;
+
+const roomBadge = document.createElement("div");
+roomBadge.className = "mp-room-badge";
+roomBadge.style.display = "none";
+uiRoot.appendChild(roomBadge);
+
+function leaveMultiplayer(): void {
+  multiplayerGame.disconnect();
+  inMultiplayer = false;
+  roomBadge.style.display = "none";
+  showMainMenu();
+}
+
+const multiplayerScreen = new MultiplayerScreen(uiRoot, {
+  onCreate: async (displayName) => {
+    try {
+      const roomCode = await multiplayerGame.createRoom(displayName);
+      multiplayerScreen.hide();
+      inMultiplayer = true;
+      roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
+      roomBadge.style.display = "block";
+    } catch (err) {
+      multiplayerScreen.showError(err instanceof Error ? err.message : "Failed to create room");
+    }
+  },
+  onJoin: async (displayName, roomCode) => {
+    try {
+      const joined = await multiplayerGame.joinRoom(displayName, roomCode);
+      if (!joined) {
+        multiplayerScreen.showError("Room not found");
+        return;
+      }
+      multiplayerScreen.hide();
+      inMultiplayer = true;
+      roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
+      roomBadge.style.display = "block";
+    } catch (err) {
+      multiplayerScreen.showError(err instanceof Error ? err.message : "Failed to join room");
+    }
+  },
+  onBack: () => {
+    multiplayerScreen.hide();
+    showMainMenu();
+  },
 });
 
 function startRun(mode: GameMode, levelDef: LevelDef | null): void {
@@ -134,6 +187,10 @@ const mainMenu = new MainMenu(uiRoot, {
   onPerkTree: () => {
     mainMenu.hide();
     perkTreeScreen.show();
+  },
+  onMultiplayer: () => {
+    mainMenu.hide();
+    multiplayerScreen.show();
   },
 });
 
@@ -229,6 +286,16 @@ function frame(now: number): void {
   lastTime = now;
 
   const moveVector = input.getMoveVector();
+
+  if (inMultiplayer) {
+    if (input.consumeJustPressed("Escape")) leaveMultiplayer();
+    multiplayerGame.sendInput(dt, moveVector);
+    const snapshot = multiplayerGame.latestSnapshot;
+    if (snapshot) renderer.renderMultiplayer(snapshot.players, multiplayerGame.playerId, now);
+    requestAnimationFrame(frame);
+    return;
+  }
+
   const mousePos = input.getMouseScreenPos();
   const aimDir = normalize({ x: mousePos.x - renderer.viewWidth / 2, y: mousePos.y - renderer.viewHeight / 2 });
   const fireHeld = input.isFireHeld();

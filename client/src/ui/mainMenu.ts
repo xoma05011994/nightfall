@@ -4,6 +4,7 @@ export interface MainMenuHandlers {
   onShop: () => void;
   onSandbox: () => void;
   onPerkTree: () => void;
+  onMultiplayer: () => void;
 }
 
 export class MainMenu {
@@ -21,6 +22,7 @@ export class MainMenu {
       <div class="menu-buttons">
         <button class="overlay-button" data-action="endless">ENDLESS</button>
         <button class="overlay-button" data-action="adventure">ADVENTURE</button>
+        <button class="overlay-button" data-action="multiplayer">MULTIPLAYER</button>
         <button class="overlay-button" data-action="shop">ARMORY</button>
         <button class="overlay-button" data-action="sandbox">SANDBOX</button>
         <button class="overlay-button" data-action="perkTree">PERK TREE</button>
@@ -29,6 +31,7 @@ export class MainMenu {
     container.appendChild(this.root);
     this.root.querySelector('[data-action="endless"]')!.addEventListener("click", handlers.onEndless);
     this.root.querySelector('[data-action="adventure"]')!.addEventListener("click", handlers.onAdventure);
+    this.root.querySelector('[data-action="multiplayer"]')!.addEventListener("click", handlers.onMultiplayer);
     this.root.querySelector('[data-action="shop"]')!.addEventListener("click", handlers.onShop);
     this.root.querySelector('[data-action="sandbox"]')!.addEventListener("click", handlers.onSandbox);
     this.root.querySelector('[data-action="perkTree"]')!.addEventListener("click", handlers.onPerkTree);
