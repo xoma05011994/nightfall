@@ -8,14 +8,18 @@ co-op multiplayer via room codes (Endless mode only).
 npm workspaces monorepo:
 
 - `shared/` — pure game-logic modules (types, constants, math, `systems/*`)
-  used by both `client/` and `server/`. No DOM or `rivetkit` imports except
-  where a module is genuinely browser-only (e.g. `systems/profile.ts`'s
-  `localStorage` — solo/Adventure-only, never touched by the server).
+  used by both `client/` and `server/`. No DOM imports except where a module
+  is genuinely browser-only (e.g. `systems/profile.ts`'s `localStorage` —
+  solo/Adventure-only, never touched by the server).
 - `client/` — Vite frontend. Solo play (`game/Game.ts`) runs fully locally
   with zero network dependency. Multiplayer (`net/MultiplayerGame.ts`) is a
   separate, thin client that sends input and renders server snapshots — the
   two never run concurrently.
-- `server/` — RivetKit actors (`matchmaker`, `match`) for co-op Endless rooms.
+- `server/` — a plain WebSocket server (the `ws` package, zero native
+  dependencies) hosting co-op Endless rooms. No external service dependency
+  — earlier versions used RivetKit/Rivet Cloud, dropped after Rivet's engine
+  hit a persistent, unresolvable actor-scheduling bug (`no_capacity` on
+  every fresh actor, reproduced across three independent runner locations).
 
 ## Dev workflow
 
@@ -28,36 +32,36 @@ npm run build                  # typecheck + production build (client)
 ```
 
 Solo play needs only `npm run dev`. Multiplayer additionally needs the
-RivetKit server running (see below) — open `http://localhost:5175` in
-multiple browser tabs to test a room locally (one tab creates a room and
-shares the code, others join with it).
+server running:
 
-### Windows note: the multiplayer server must run under WSL
+```
+npm run dev:server   # from survivor-2d/ — plain Node process on :8080
+```
 
-`rivetkit@2.3.4+`'s native runtime has no published `.node` binary for
-Windows, and the WASM fallback's local-engine-spawn path isn't compatible
-with the WASM runtime on this version — the same constraint already
-documented for this repo's earlier 3D prototype. The Linux native binary
-works correctly, so on Windows the **server** runs under WSL while the
-**client** (Vite) runs natively on Windows:
+No WSL, no external service, no native dependencies — runs the same way on
+Windows/Linux/macOS. Open `http://localhost:5175` in multiple browser tabs
+to test a room locally (one tab creates a room and shares the code, others
+join with it); the client's dev default already points at
+`ws://localhost:8080/ws`.
 
-- A WSL-native working copy lives at `~/survivor-2d` inside the WSL distro
-  (its own `node_modules` — do not run `npm install` for the server
-  workspace cross-filesystem from `/mnt/...`, both for native-binary
-  correctness and performance).
-- `~/sync-survivor-2d.sh` copies `server/src` and `shared/src` from the
-  Windows-mounted repo into that working copy (symlinks don't work here —
-  Node resolves symlinks to their real path for module resolution, which
-  would pull in the broken Windows `node_modules` instead). Re-run it after
-  editing server or shared source before restarting the server — the
-  `.claude/launch.json` `survivor-2d-server` entry already does this
-  automatically on every start.
-- `.claude/launch.json`'s `survivor-2d-server` entry runs
-  `wsl.exe -d Ubuntu -- bash -c "~/sync-survivor-2d.sh && cd ~/survivor-2d/server && npx tsx --watch src/index.ts"`
-  on port 6420 (RivetKit's own default).
+## Deployment
 
-On Linux/macOS this workaround isn't needed — `npm run dev:server` from
-`server/` (after `npm install` at the repo root) works directly.
+Client and server deploy independently — there's no shared origin
+requirement (WebSocket connections aren't subject to CORS the way
+fetch/XHR are).
+
+- **Client → Vercel**: static Vite build (`client/dist`), configured via the
+  repo-root `vercel.json`. Set the **Root Directory** to the repo root when
+  importing the project (not `client/` — the build needs the sibling
+  `shared/` workspace). Set `VITE_WS_URL` to the deployed server's `wss://`
+  URL (e.g. `wss://your-app.up.railway.app/ws`) as a Vercel environment
+  variable — there's no baked-in production default, since guessing one
+  wrong fails silently.
+- **Server → Railway** (or any host that runs a persistent Docker
+  container with public networking — Fly.io, a VPS, etc.): builds from the
+  repo-root `Dockerfile` (server-only image). No environment variables
+  required beyond what the platform sets itself (`$PORT`). Needs public
+  networking enabled so browser clients can reach it directly.
 
 ## Concept
 
@@ -187,13 +191,14 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   Sandbox mode). `start(mode, levelDef?, weaponUpgrades?)` resets a run;
   Adventure mode reseeds the RNG from the level's own seed. Fully local, no
   network calls.
-- `client/src/net/` — the **multiplayer** client: `rivetClient.ts` wraps
-  `createClient<typeof registry>()`; `MultiplayerGame.ts` owns the
-  connection, sends capped-rate input (move/aim/fire), exposes the latest
-  server snapshot, and surfaces `levelUp` events (offered perk ids only —
-  the client resolves them to full `Perk` objects via `getPerkById` and
-  applies a choice through the `chooseUpgrade` action, re-validated
-  server-side).
+- `client/src/net/MultiplayerGame.ts` — the **multiplayer** client: owns a
+  plain `WebSocket` connection (room create/join happens via the connection
+  URL's query params, not a message), sends capped-rate input (move/aim/fire),
+  exposes the latest server snapshot, auto-reconnects on an unexpected close
+  (`connStatus` surfaces this for the UI's "Reconnecting…" banner), and
+  surfaces `levelUp` events (offered perk ids only — the client resolves
+  them to full `Perk` objects via `getPerkById` and applies a choice through
+  a `chooseUpgrade` message, re-validated server-side).
 - `client/src/render/renderer.ts` — Canvas2D world rendering. `render()`
   draws one `RenderState` (ground texture, fence, entities, chests,
   pickups, beam/cone/aura effects, vignette, per-level palette, plus an
@@ -205,27 +210,31 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   screen, armory (shop) screen, level-up perk modal, weapon-pickup
   slot-choice modal, pause modal, sandbox panel, perk tree screen,
   multiplayer room screen, results screen (win or lose).
-- `server/src/actors/matchmaker.ts` — room-code create/resolve/close
-  (in-memory `c.state`, opportunistic staleness pruning on create).
-- `server/src/actors/match.ts` — one per co-op room: `setInput` and
-  `chooseUpgrade` actions, a fixed 20Hz tick loop that runs the full
-  simulation (movement, firing, projectile resolution partitioned by
-  `ownerId` for correct per-owner life-steal, enemy AI/contact/projectiles
-  targeting the nearest connected player, status effects, Chain Link,
-  pooled party XP with independent per-player perk rolls, weapon pickups,
-  chests, enemy/chest spawning) and broadcasts one `snapshot` event per
-  tick. Reconnects rejoin the same player record (build/level/position
-  survive); the room closes itself — via `matchmaker.closeRoom` — only
-  after `ROOM_EMPTY_GRACE_MS` (30s) with zero connected players, checked
-  once per tick rather than the instant the last connection drops, so a
-  brief reconnect blip can't delete the room code out from under a party
-  that's about to come right back.
+- `server/src/index.ts` — the WebSocket upgrade handler and room registry
+  (`Map<roomCode, Room>`, mirroring the room-code generation logic room
+  codes have always used). One connection per player; `mode=create` mints
+  a fresh code and room, `mode=join` looks an existing one up by code.
+  Reconnects (same `playerId`, same room code) reattach to the same
+  in-memory player record — build/level/position survive.
+- `server/src/room.ts` — one `Room` instance per co-op session: handles
+  `input`/`chooseUpgrade` messages, runs a fixed 20Hz `setInterval` tick loop
+  simulating the whole party (movement, firing, projectile resolution
+  partitioned by `ownerId` for correct per-owner life-steal, enemy
+  AI/contact/projectiles targeting the nearest connected player, status
+  effects, Chain Link, pooled party XP with independent per-player perk
+  rolls, weapon pickups, chests, enemy/chest spawning), and broadcasts one
+  `snapshot` message per tick to every connected player. The room closes
+  itself only after `ROOM_EMPTY_GRACE_MS` (30s) with zero connected
+  players, checked once per tick rather than the instant the last
+  connection drops, so a brief network blip can't delete the room out from
+  under a party that's about to reconnect. No persistence at all — if the
+  server process restarts, every room is gone (accepted MVP tradeoff).
 - `shared/src/systems/chainLink.ts` — the Chain Link perk's damage tick:
   draws a laser (reusing the `LightningEffect` visual) between each pair of
   adjacent connected players in connection order and damages any enemy
   within `CHAIN_LINK_HIT_WIDTH` of a segment, deduped so an enemy caught
   between multiple segments is only hit once per tick. Multiplayer-only,
-  called directly from `match.ts`'s tick loop.
+  called directly from `room.ts`'s tick loop.
 - `shared/tests/`, `client/tests/` — vitest unit tests per workspace (see
   `npm test`).
 
@@ -250,4 +259,9 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   for co-op.
 - No host/non-host distinction in co-op — every connected player has equal
   standing (there's no host-only action that would need one).
-- Local dev only; no cloud deployment config for the server yet.
+- Server has zero persistence — a process restart loses every live room
+  (players reconnect fresh, no build/level continuity). Acceptable at this
+  scale; would need a real datastore to fix.
+- No origin/CORS restriction on the WebSocket server — any origin can
+  connect. Fine for a small-scale hobby project; would want an allowlist
+  before wider distribution.

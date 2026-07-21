@@ -9,11 +9,12 @@
   },
   "dependencies": {
     "@nightfall/shared": "*",
-    "rivetkit": "^2.3.4"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
     "tsx": "^4.19.2",
-    "@types/node": "^22.10.2"
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13"
   }
 }

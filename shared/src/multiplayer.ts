@@ -38,7 +38,16 @@ export interface MatchSnapshot {
   rewardPopups: RewardPopupEffect[];
 }
 
-export interface RoomInfo {
-  roomCode: string;
-  matchId: string;
-}
+// Plain WebSocket protocol (v0.6 M... — replaces the earlier RivetKit actor
+// transport after Rivet Cloud's engine hit an unresolvable actor-scheduling
+// bug). One JSON message per WebSocket frame, discriminated on `type`.
+// Room create/join happen via the connection URL's query params
+// (mode=create|join, playerId, displayName, code), not as messages — see
+// server/src/index.ts's upgrade handler and client/src/net/MultiplayerGame.ts.
+
+export type ClientMessage = { type: "input"; payload: PlayerInputDTO } | { type: "chooseUpgrade"; payload: { perkId: string } };
+
+export type ServerMessage =
+  | { type: "welcome"; payload: { roomCode: string } }
+  | { type: "snapshot"; payload: MatchSnapshot }
+  | { type: "levelUp"; payload: { offerIds: string[] } };

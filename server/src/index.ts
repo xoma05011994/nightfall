@@ -1,27 +1,99 @@
 import { createServer } from "node:http";
-import { setup } from "rivetkit";
-import { matchmaker } from "./actors/matchmaker";
-import { match } from "./actors/match";
+import { WebSocketServer, type WebSocket } from "ws";
+import { MAX_PARTY_SIZE, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, isValidRoomCode } from "@nightfall/shared/constants";
+import type { ClientMessage } from "@nightfall/shared/multiplayer";
+import { Room } from "./room";
 
-// Windows has no published native N-API binary for rivetkit's native runtime
-// as of 2.3.4, and the WASM fallback's local-engine-spawn path isn't
-// compatible with the WASM runtime on this version — same constraint already
-// documented for this repo's earlier 3D prototype (game/README.md). The
-// server therefore runs under WSL; see survivor-2d/README.md.
-export const registry = setup({
-  use: { matchmaker, match },
-});
+const MAX_PLAYER_ID_LEN = 128;
+const MAX_DISPLAY_NAME_LEN = 24;
 
-registry.start();
+// Room registry — matchId === roomCode, so there's no extra indirection
+// table (mirrors the old RivetKit matchmaker's design). A room removes
+// itself via the `onEmpty` callback passed to its constructor once it's
+// been empty past ROOM_EMPTY_GRACE_MS (see Room.step()).
+const rooms = new Map<string, Room>();
 
-// registry.start() in the default "envoy" runtime mode (used here, not Rivet
-// Compute's "serverless" mode) doesn't bind any port — it only opens a
-// persistent outbound connection to Rivet's engine (RIVET_ENDPOINT), which
-// is how actors actually get hosted. Railway (and most PaaS health checks)
-// still expect the deployed process to answer on $PORT, so this tiny server
-// exists purely to satisfy that — it has nothing to do with actor traffic.
-const healthPort = Number(process.env.PORT) || 8080;
-createServer((_req, res) => {
+function generateRoomCode(): string {
+  let code = "";
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
+    code += ROOM_CODE_ALPHABET[Math.floor(Math.random() * ROOM_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function createRoom(): Room {
+  let code = generateRoomCode();
+  while (rooms.has(code)) code = generateRoomCode();
+  const room = new Room(code, () => rooms.delete(code));
+  rooms.set(code, room);
+  return room;
+}
+
+const server = createServer((_req, res) => {
   res.writeHead(200, { "content-type": "text/plain" });
   res.end("ok");
-}).listen(healthPort);
+});
+
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+wss.on("connection", (ws: WebSocket, req) => {
+  const url = new URL(req.url ?? "", "http://localhost");
+  const mode = url.searchParams.get("mode");
+  const playerId = url.searchParams.get("playerId");
+  const displayName = url.searchParams.get("displayName");
+
+  if (
+    typeof playerId !== "string" ||
+    playerId.length === 0 ||
+    playerId.length > MAX_PLAYER_ID_LEN ||
+    typeof displayName !== "string" ||
+    displayName.length === 0 ||
+    displayName.length > MAX_DISPLAY_NAME_LEN
+  ) {
+    ws.close(4000, "Invalid connection params");
+    return;
+  }
+
+  let room: Room;
+  if (mode === "create") {
+    room = createRoom();
+  } else if (mode === "join") {
+    const code = url.searchParams.get("code") ?? "";
+    const existing = isValidRoomCode(code) ? rooms.get(code) : undefined;
+    if (!existing) {
+      ws.close(4004, "Room not found");
+      return;
+    }
+    room = existing;
+  } else {
+    ws.close(4000, "Invalid mode");
+    return;
+  }
+
+  const rejectReason = room.addPlayer(playerId, displayName, ws);
+  if (rejectReason) {
+    ws.close(4003, rejectReason);
+    return;
+  }
+  room.sendWelcome(ws);
+
+  ws.on("message", (raw) => {
+    let msg: ClientMessage;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return; // malformed message, ignore
+    }
+    if (typeof msg !== "object" || msg === null || typeof (msg as { type?: unknown }).type !== "string") return;
+    room.handleMessage(playerId, msg);
+  });
+
+  ws.on("close", () => {
+    room.removePlayer(playerId, ws);
+  });
+});
+
+const port = Number(process.env.PORT) || 8080;
+server.listen(port, () => {
+  console.log(`Nightfall server listening on :${port} (max party size ${MAX_PARTY_SIZE})`);
+});
