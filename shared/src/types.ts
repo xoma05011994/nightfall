@@ -120,6 +120,11 @@ export interface Projectile {
   hitEnemyIds?: number[];
   // Cosmetic-only flag for a max-level ("GIGA") weapon shot — bigger, glowing.
   giga?: boolean;
+  // Multiplayer only — which player fired this, so the server can route
+  // life-steal to the correct player when resolving hits (each player's
+  // projectiles are resolved in their own resolveProjectileHits() call).
+  // Always undefined in solo.
+  ownerId?: string;
 }
 
 export interface XpOrb {

@@ -1,8 +1,8 @@
-import { FENCE_POST_SPACING, PLAYER_RADIUS, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
+import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
 import { drawWeaponIcon } from "./weaponIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
-import type { PlayerSnapshot } from "@nightfall/shared/multiplayer";
+import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
 
 const DEFAULT_PALETTE: LevelPalette = { bg: "#1c1310", splatterRGB: "139, 0, 0", fence: "#3a2416" };
 
@@ -24,6 +24,9 @@ export interface RenderState {
   coneEffects: ConeEffect[];
   lightningEffects: LightningEffect[];
   rewardPopups: RewardPopupEffect[];
+  // Co-op only — the rest of the party, drawn alongside the local player.
+  // Undefined/empty in solo.
+  otherPlayers?: PlayerSnapshot[];
 }
 
 const SPLATTER_FIELD_HALF_SIZE = 4000;
@@ -117,6 +120,9 @@ export class Renderer {
     this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, nowMs);
+    if (state.otherPlayers) {
+      for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
+    }
     this.drawRewardPopups(state.rewardPopups, nowMs);
 
     ctx.restore();
@@ -124,40 +130,43 @@ export class Renderer {
     this.drawVignette(w, h, state.player.hp / state.player.maxHp);
   }
 
-  // M1 co-op: movement-only, no enemies/combat yet, so this is a minimal
-  // sibling of render() rather than overloading RenderState with
-  // multiplayer-only fields the solo path would never fill in.
-  renderMultiplayer(players: PlayerSnapshot[], localPlayerId: string, nowMs: number): void {
-    const ctx = this.ctx;
-    const w = this.viewWidth;
-    const h = this.viewHeight;
-    const local = players.find((p) => p.id === localPlayerId);
-    const camera = local?.position ?? { x: 0, y: 0 };
-
-    ctx.fillStyle = this.palette.bg;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.save();
-    ctx.translate(w / 2 - camera.x, h / 2 - camera.y);
-
-    this.drawSplatters(camera, w, h);
-    this.drawFence(camera, w, h);
-    for (const p of players) {
-      this.drawMultiplayerPlayer(p, p.id === localPlayerId, nowMs);
-    }
-
-    ctx.restore();
+  // Co-op: builds a RenderState from the server snapshot (local player drives
+  // the camera and reuses the same solo draw calls; the rest of the party is
+  // drawn via drawRemotePlayer) and delegates to the normal render() — this
+  // keeps one drawing pipeline for both solo and multiplayer.
+  renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, nowMs: number): void {
+    const local = snapshot.players.find((p) => p.id === localPlayerId);
+    if (!local) return;
+    const otherPlayers = snapshot.players.filter((p) => p.id !== localPlayerId);
+    this.render(
+      {
+        player: local.player,
+        enemies: snapshot.enemies,
+        projectiles: snapshot.projectiles,
+        enemyProjectiles: snapshot.enemyProjectiles,
+        xpOrbs: snapshot.xpOrbs,
+        weaponPickups: snapshot.weaponPickups,
+        chests: snapshot.chests,
+        beamEffects: snapshot.beamEffects,
+        coneEffects: snapshot.coneEffects,
+        lightningEffects: snapshot.lightningEffects,
+        rewardPopups: snapshot.rewardPopups,
+        otherPlayers,
+      },
+      nowMs,
+    );
   }
 
-  private drawMultiplayerPlayer(player: PlayerSnapshot, isLocal: boolean, nowMs: number): void {
+  private drawRemotePlayer(snapshot: PlayerSnapshot, nowMs: number): void {
     const ctx = this.ctx;
+    const player = snapshot.player;
     const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
     ctx.save();
-    ctx.shadowColor = isLocal ? "#c81e1e" : "#4ee2ff";
+    ctx.shadowColor = "#4ee2ff";
     ctx.shadowBlur = 18;
-    ctx.fillStyle = isLocal ? "#8b0000" : "#1c5c6e";
+    ctx.fillStyle = "#1c5c6e";
     ctx.beginPath();
-    ctx.arc(player.position.x, player.position.y, PLAYER_RADIUS * pulse, 0, Math.PI * 2);
+    ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.strokeStyle = "#d8cfc2";
@@ -165,14 +174,12 @@ export class Renderer {
     ctx.stroke();
     ctx.restore();
 
-    if (!isLocal) {
-      ctx.save();
-      ctx.fillStyle = "#d8cfc2";
-      ctx.font = "12px Georgia";
-      ctx.textAlign = "center";
-      ctx.fillText(player.displayName, player.position.x, player.position.y - PLAYER_RADIUS - 10);
-      ctx.restore();
-    }
+    ctx.save();
+    ctx.fillStyle = "#d8cfc2";
+    ctx.font = "12px Georgia";
+    ctx.textAlign = "center";
+    ctx.fillText(snapshot.displayName, player.position.x, player.position.y - player.radius - 10);
+    ctx.restore();
   }
 
   private inView(x: number, y: number, camera: Vec2, w: number, h: number, margin: number): boolean {

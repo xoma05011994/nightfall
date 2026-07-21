@@ -134,15 +134,23 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
     damage-dealt readout — for checking actual numbers instead of inferring
     them from a real run.
   - **Multiplayer** (from the main menu, v0.6, in progress) — co-op Endless
-    in a room: create a room and share the 6-character code, or join one.
-    Up to 4 players. Currently movement-only (M1) — server-authoritative
-    position sync at 20 ticks/sec, client-predicted local movement, remote
-    players interpolated from snapshots. Enemies/combat/loot land in later
-    milestones, along with shared/pooled party XP (everyone levels up
-    together, each player independently rolls their own perk offers) and a
-    "Chain Link" perk that damages enemies via a laser between party
-    members. No friendly fire by construction (player damage only ever
-    targets the `enemies` array, never other players).
+    in a room: create a room and share the 6-character code, or join one. Up
+    to 4 players. Server-authoritative at 20 ticks/sec: movement, enemy
+    spawning/AI, projectiles, status effects (ignite/aura), XP orbs, weapon
+    pickups, and chests are all fully simulated on the server and broadcast
+    every tick as one `MatchSnapshot`, reusing the exact same `shared/`
+    systems the solo path uses. XP and leveling are currently **per-player**
+    (each player's kills feed only their own xp/level) — shared/pooled party
+    XP lands in a later milestone. Level-up still offers each player their
+    own independently-rolled 3 perks, applied only to that player's build.
+    No friendly fire by construction (every damage path only ever targets
+    the `enemies` array, never other players — verified live: one player's
+    projectiles pass straight through another player's position without
+    affecting their hp). Weapon pickups auto-equip into an empty slot or
+    level up a held duplicate; if both slots are full the pickup is just
+    left on the ground (the slot-swap prompt isn't wired up for multiplayer
+    yet). No death/game-over flow yet — hp clamps at 0 and the player stays
+    playable. No pause or reconnect handling in co-op yet.
 - The play area is bounded by a perimeter fence — no infinite wandering.
   Dark/blood/bone visual palette (swapped per Adventure level), Canvas2D
   rendering, camera follows the player without ever rotating.
@@ -170,26 +178,36 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   network calls.
 - `client/src/net/` — the **multiplayer** client: `rivetClient.ts` wraps
   `createClient<typeof registry>()`; `MultiplayerGame.ts` owns the
-  connection, sends capped-rate input, and exposes the latest server
-  snapshot.
-- `client/src/render/renderer.ts` — Canvas2D world rendering. `render()` for
-  solo (ground texture, fence, entities, chests, pickups, beam/cone/aura
-  effects, vignette, per-level palette); `renderMultiplayer()` for the co-op
-  movement-only view. No DOM.
+  connection, sends capped-rate input (move/aim/fire), exposes the latest
+  server snapshot, and surfaces `levelUp` events (offered perk ids only —
+  the client resolves them to full `Perk` objects via `getPerkById` and
+  applies a choice through the `chooseUpgrade` action, re-validated
+  server-side).
+- `client/src/render/renderer.ts` — Canvas2D world rendering. `render()`
+  draws one `RenderState` (ground texture, fence, entities, chests,
+  pickups, beam/cone/aura effects, vignette, per-level palette, plus an
+  optional `otherPlayers` list for co-op teammates); `renderMultiplayer()`
+  builds that `RenderState` from a `MatchSnapshot` (local player drives the
+  camera) and delegates to `render()` — one drawing pipeline for both solo
+  and co-op. No DOM.
 - `client/src/ui/` — DOM overlay: HUD, perk tray, main menu, level-select
   screen, armory (shop) screen, level-up perk modal, weapon-pickup
   slot-choice modal, pause modal, sandbox panel, perk tree screen,
   multiplayer room screen, results screen (win or lose).
 - `server/src/actors/matchmaker.ts` — room-code create/resolve/close
   (in-memory `c.state`, opportunistic staleness pruning on create).
-- `server/src/actors/match.ts` — one per co-op room: `connect`/`setInput`
-  actions, a fixed 20Hz tick loop that integrates player movement and
-  broadcasts a `snapshot` event. Movement-only for now (M1) — enemies,
-  combat, loot, and shared XP land in later milestones.
+- `server/src/actors/match.ts` — one per co-op room: `setInput` and
+  `chooseUpgrade` actions, a fixed 20Hz tick loop that runs the full
+  simulation (movement, firing, projectile resolution partitioned by
+  `ownerId` for correct per-owner life-steal, enemy AI/contact/projectiles
+  targeting the nearest connected player, status effects, per-player XP
+  orbs and level-up perk rolls, weapon pickups, chests, enemy/chest
+  spawning) and broadcasts one `snapshot` event per tick. Shared/pooled
+  party XP and reconnect handling land in later milestones.
 - `shared/tests/`, `client/tests/` — vitest unit tests per workspace (see
   `npm test`).
 
-## Known gaps (accepted for v0.6 M1)
+## Known gaps (accepted for v0.6 M2)
 
 - No sound.
 - Weapon balance (damage/fire-rate/magazine/reload numbers, perk/upgrade
@@ -201,6 +219,14 @@ On Linux/macOS this workaround isn't needed — `npm run dev:server` from
   procedural world (though the play area is bounded anyway).
 - Player identity/profile has no cloud sync — `localStorage` only, tied to
   one browser.
-- Multiplayer is movement-only so far — no enemies, combat, loot, XP, perks,
-  pause, or reconnect handling yet in co-op (all solo-only for now). Local
-  dev only; no cloud deployment config for the server yet.
+- Co-op XP/leveling is per-player, not pooled across the party yet (M3).
+  "Chain Link" (a multiplayer-only perk that damages enemies via a laser
+  between party members) doesn't exist yet either (M4), nor does an explicit
+  automated no-friendly-fire regression test (M4) — only manually verified
+  so far.
+- Co-op has no pause, no reconnect handling, and no death/game-over flow
+  (hp clamps at 0, player stays playable) — all M5.
+- Multiplayer weapon pickups: if both extra slots are full, the pickup is
+  just left on the ground — the slot-swap prompt from solo isn't wired up
+  for co-op.
+- Local dev only; no cloud deployment config for the server yet.

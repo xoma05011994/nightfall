@@ -196,6 +196,14 @@ describe("stepEnemies", () => {
     stepEnemies([grunt], { x: 0, y: 0 }, 1, enemyProjectiles, 1);
     expect(enemyProjectiles).toHaveLength(0);
   });
+
+  it("co-op: targets whichever player position in the array is nearest", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, speed: 50 });
+    // Far target in +x, near target in -x — opposite sides so the move
+    // direction unambiguously reveals which one was targeted.
+    stepEnemies([enemy], [{ x: 1000, y: 0 }, { x: -50, y: 0 }], 1);
+    expect(enemy.position.x).toBeLessThan(0);
+  });
 });
 
 describe("stepEnemyProjectiles / resolveEnemyProjectileHits", () => {
@@ -245,5 +253,15 @@ describe("resolveEnemyContactDamage", () => {
     const dealt = resolveEnemyContactDamage([enemy], player);
     expect(dealt).toBe(0);
     expect(player.hp).toBe(100);
+  });
+
+  it("co-op: damages only the specific player an enemy overlaps, not the whole party", () => {
+    const near = makePlayer({ position: { x: 0, y: 0 }, hp: 100 });
+    const far = makePlayer({ position: { x: 1000, y: 0 }, hp: 100 });
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, damage: 8, contactTimerMs: 0 });
+    const dealt = resolveEnemyContactDamage([enemy], [far, near]);
+    expect(dealt).toBe(8);
+    expect(near.hp).toBe(92);
+    expect(far.hp).toBe(100);
   });
 });

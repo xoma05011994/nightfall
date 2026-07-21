@@ -16,14 +16,15 @@ function getOrCreatePlayerId(): string {
 }
 
 // Owns the RivetKit connection for co-op Endless: create/join a room by
-// code, send movement input at a capped rate, and expose the latest
-// server-broadcast snapshot for rendering. M1 is movement-only — no
-// enemies/combat/xp yet (that's M2+), so this is intentionally thin.
+// code, send input (movement/aim/fire) at a capped rate, and expose the
+// latest server-broadcast snapshot for rendering. The server is fully
+// authoritative — this class never simulates combat locally.
 export class MultiplayerGame {
   readonly playerId = getOrCreatePlayerId();
   private conn: MatchConn | undefined;
   private inputAccumulatorMs = 0;
   private readonly sendIntervalMs = 1000 / INPUT_SEND_HZ;
+  private onLevelUpCallback: ((offerIds: string[]) => void) | null = null;
 
   latestSnapshot: MatchSnapshot | null = null;
   roomCode: string | null = null;
@@ -48,13 +49,24 @@ export class MultiplayerGame {
     return true;
   }
 
+  // Called once, before create/joinRoom — the level-up modal needs this to
+  // know which perks were actually offered (the server sends ids only, the
+  // client resolves them to full Perk objects via getPerkById for display).
+  onLevelUp(callback: (offerIds: string[]) => void): void {
+    this.onLevelUpCallback = callback;
+  }
+
   private async joinMatch(matchId: string, displayName: string): Promise<void> {
     const handle = rivetClient.match.getOrCreate([matchId]);
     this.conn = handle.connect({ playerId: this.playerId, displayName });
     // Callback payload is typed `unknown` by rivetkit's event<T>() generic
-    // inference — the runtime value is real, asserted here at the one call site.
+    // inference — the runtime value is real, asserted here at each call site.
     this.conn.on("snapshot", (raw) => {
       this.latestSnapshot = raw as MatchSnapshot;
+    });
+    this.conn.on("levelUp", (raw) => {
+      const payload = raw as { offerIds: string[] };
+      this.onLevelUpCallback?.(payload.offerIds);
     });
     this.connected = true;
   }
@@ -67,13 +79,17 @@ export class MultiplayerGame {
     this.roomCode = null;
   }
 
+  chooseUpgrade(perkId: string): void {
+    this.conn?.chooseUpgrade(perkId);
+  }
+
   // Call once per frame; internally throttles the actual network send to
   // INPUT_SEND_HZ so movement keys held down don't spam setInput every frame.
-  sendInput(dt: number, moveVector: Vec2): void {
+  sendInput(dt: number, moveVector: Vec2, aimDir: Vec2, fireHeld: boolean): void {
     if (!this.conn) return;
     this.inputAccumulatorMs += dt * 1000;
     if (this.inputAccumulatorMs < this.sendIntervalMs) return;
     this.inputAccumulatorMs = 0;
-    this.conn.setInput({ moveX: moveVector.x, moveY: moveVector.y });
+    this.conn.setInput({ moveX: moveVector.x, moveY: moveVector.y, aimX: aimDir.x, aimY: aimDir.y, fireHeld });
   }
 }

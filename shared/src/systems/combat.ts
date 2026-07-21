@@ -89,18 +89,37 @@ function makeEnemyProjectile(id: number, origin: Vec2, dir: Vec2): Projectile {
   };
 }
 
-// Grunts/Brutes beeline for the player. Shooters instead hover around
-// `preferredRange` (advancing if too far, backing off if too close) and
-// periodically lob a slow projectile — appended to `enemyProjectiles`.
-// Returns the next free projectile id.
-export function stepEnemies(enemies: Enemy[], playerPos: Vec2, dt: number, enemyProjectiles: Projectile[] = [], nextProjectileId = 1): number {
+function nearestPosition(from: Vec2, positions: Vec2[]): Vec2 {
+  let nearest = positions[0]!;
+  let nearestDistSq = Infinity;
+  for (const pos of positions) {
+    const dx = pos.x - from.x;
+    const dy = pos.y - from.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = pos;
+    }
+  }
+  return nearest;
+}
+
+// Grunts/Brutes beeline for the nearest player. Shooters instead hover
+// around `preferredRange` of their nearest target (advancing if too far,
+// backing off if too close) and periodically lob a slow projectile —
+// appended to `enemyProjectiles`. Accepts either one player's position
+// (solo) or several (co-op) — each enemy independently targets whichever is
+// closest to it. Returns the next free projectile id.
+export function stepEnemies(enemies: Enemy[], playerPos: Vec2 | Vec2[], dt: number, enemyProjectiles: Projectile[] = [], nextProjectileId = 1): number {
+  const positions = Array.isArray(playerPos) ? playerPos : [playerPos];
   let nextId = nextProjectileId;
   for (const enemy of enemies) {
     if (enemy.contactTimerMs > 0) enemy.contactTimerMs -= dt * 1000;
+    const target = nearestPosition(enemy.position, positions);
 
     if (enemy.type === "shooter") {
-      const dir = directionTo(enemy.position, playerPos);
-      const dist = distance(enemy.position, playerPos);
+      const dir = directionTo(enemy.position, target);
+      const dist = distance(enemy.position, target);
       const preferred = enemy.preferredRange ?? SHOOTER_PREFERRED_RANGE;
       if (dist > preferred + 20) {
         enemy.position.x += dir.x * enemy.speed * dt;
@@ -118,7 +137,7 @@ export function stepEnemies(enemies: Enemy[], playerPos: Vec2, dt: number, enemy
         }
       }
     } else {
-      const dir = directionTo(enemy.position, playerPos);
+      const dir = directionTo(enemy.position, target);
       enemy.position.x += dir.x * enemy.speed * dt;
       enemy.position.y += dir.y * enemy.speed * dt;
     }
@@ -130,13 +149,16 @@ export function stepEnemyProjectiles(projectiles: Projectile[], dt: number): Pro
   return stepProjectiles(projectiles, dt);
 }
 
-// Enemy slow-missile hits the player directly (no pierce/splash) — returns
-// the surviving projectiles, mutating player.hp on each hit.
-export function resolveEnemyProjectileHits(projectiles: Projectile[], player: Player): Projectile[] {
+// Enemy slow-missile hits whichever player it touches first (no
+// pierce/splash) — returns the surviving projectiles, mutating that
+// player's hp. Accepts one player (solo) or several (co-op).
+export function resolveEnemyProjectileHits(projectiles: Projectile[], player: Player | Player[]): Projectile[] {
+  const players = Array.isArray(player) ? player : [player];
   const surviving: Projectile[] = [];
   for (const p of projectiles) {
-    if (circlesOverlap(p.position, p.radius, player.position, player.radius)) {
-      player.hp -= p.damage;
+    const hit = players.find((pl) => circlesOverlap(p.position, p.radius, pl.position, pl.radius));
+    if (hit) {
+      hit.hp -= p.damage;
       continue;
     }
     surviving.push(p);
@@ -144,17 +166,21 @@ export function resolveEnemyProjectileHits(projectiles: Projectile[], player: Pl
   return surviving;
 }
 
-// Returns total damage dealt to the player this step (each enemy can only
-// land a hit once per its own contact cooldown, not globally).
-export function resolveEnemyContactDamage(enemies: Enemy[], player: Player): number {
+// Returns total damage dealt across all players this step (each enemy can
+// only land a hit once per its own contact cooldown, not globally, and only
+// ever damages the first player it's found overlapping). Accepts one player
+// (solo) or several (co-op).
+export function resolveEnemyContactDamage(enemies: Enemy[], player: Player | Player[]): number {
+  const players = Array.isArray(player) ? player : [player];
   let totalDamage = 0;
   for (const enemy of enemies) {
     if (enemy.contactTimerMs > 0) continue;
-    if (circlesOverlap(enemy.position, enemy.radius, player.position, player.radius)) {
+    const hit = players.find((pl) => circlesOverlap(enemy.position, enemy.radius, pl.position, pl.radius));
+    if (hit) {
+      hit.hp -= enemy.damage;
       totalDamage += enemy.damage;
       enemy.contactTimerMs = enemy.contactCooldownMs;
     }
   }
-  if (totalDamage > 0) player.hp -= totalDamage;
   return totalDamage;
 }

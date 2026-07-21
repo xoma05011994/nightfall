@@ -18,6 +18,7 @@ import { MultiplayerGame } from "./net/MultiplayerGame";
 import { LEVELS } from "@nightfall/shared/systems/levels";
 import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
 import { WEAPON_DEFS, isWeaponMaxLevel } from "@nightfall/shared/systems/weapons";
+import { getPerkById } from "@nightfall/shared/systems/perks";
 import { normalize } from "@nightfall/shared/math";
 import type { GameMode, LevelDef } from "@nightfall/shared/types";
 
@@ -72,6 +73,13 @@ const perkTreeScreen = new PerkTreeScreen(uiRoot, () => {
 const multiplayerGame = new MultiplayerGame();
 let inMultiplayer = false;
 
+multiplayerGame.onLevelUp((offerIds) => {
+  const offers = offerIds.map((id) => getPerkById(id)).filter((p): p is NonNullable<typeof p> => p !== undefined);
+  perkModal.show(offers, (perk) => {
+    multiplayerGame.chooseUpgrade(perk.id);
+  });
+});
+
 const roomBadge = document.createElement("div");
 roomBadge.className = "mp-room-badge";
 roomBadge.style.display = "none";
@@ -81,6 +89,8 @@ function leaveMultiplayer(): void {
   multiplayerGame.disconnect();
   inMultiplayer = false;
   roomBadge.style.display = "none";
+  hud.setVisible(false);
+  perkTray.setVisible(false);
   showMainMenu();
 }
 
@@ -90,6 +100,8 @@ const multiplayerScreen = new MultiplayerScreen(uiRoot, {
       const roomCode = await multiplayerGame.createRoom(displayName);
       multiplayerScreen.hide();
       inMultiplayer = true;
+      hud.setVisible(true);
+      perkTray.setVisible(true);
       roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
       roomBadge.style.display = "block";
     } catch (err) {
@@ -105,6 +117,8 @@ const multiplayerScreen = new MultiplayerScreen(uiRoot, {
       }
       multiplayerScreen.hide();
       inMultiplayer = true;
+      hud.setVisible(true);
+      perkTray.setVisible(true);
       roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
       roomBadge.style.display = "block";
     } catch (err) {
@@ -286,19 +300,50 @@ function frame(now: number): void {
   lastTime = now;
 
   const moveVector = input.getMoveVector();
-
-  if (inMultiplayer) {
-    if (input.consumeJustPressed("Escape")) leaveMultiplayer();
-    multiplayerGame.sendInput(dt, moveVector);
-    const snapshot = multiplayerGame.latestSnapshot;
-    if (snapshot) renderer.renderMultiplayer(snapshot.players, multiplayerGame.playerId, now);
-    requestAnimationFrame(frame);
-    return;
-  }
-
   const mousePos = input.getMouseScreenPos();
   const aimDir = normalize({ x: mousePos.x - renderer.viewWidth / 2, y: mousePos.y - renderer.viewHeight / 2 });
   const fireHeld = input.isFireHeld();
+
+  if (inMultiplayer) {
+    if (input.consumeJustPressed("Escape")) leaveMultiplayer();
+    multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
+    const snapshot = multiplayerGame.latestSnapshot;
+    if (snapshot) {
+      renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+      const local = snapshot.players.find((p) => p.id === multiplayerGame.playerId)?.player;
+      if (local) {
+        const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
+          const slot = local.weaponSlots[i as 0 | 1 | 2];
+          return {
+            name: slot ? WEAPON_DEFS[slot.weaponId].name : null,
+            equipped: local.equippedSlot === i,
+            icon: slot ? WEAPON_DEFS[slot.weaponId].icon : null,
+            level: slot?.level ?? 1,
+            maxed: slot ? isWeaponMaxLevel(slot.level) : false,
+          };
+        }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+        const equipped = local.weaponSlots[local.equippedSlot];
+        const equippedDef = equipped ? WEAPON_DEFS[equipped.weaponId] : null;
+        hud.update({
+          hp: local.hp,
+          maxHp: local.maxHp,
+          xp: local.xp,
+          xpToNext: local.xpToNext,
+          level: local.level,
+          elapsedMs: snapshot.elapsedMs,
+          kills: 0,
+          gold: 0,
+          slots,
+          ammo: equipped?.ammo ?? 0,
+          magazineSize: equippedDef?.magazineSize ?? 1,
+          reloading: equipped?.reloading ?? false,
+          reloadRatio: equipped && equippedDef ? equipped.reloadTimerMs / equippedDef.reloadMs : 0,
+        });
+      }
+    }
+    requestAnimationFrame(frame);
+    return;
+  }
 
   if (input.consumeJustPressed("Digit1")) game.equipSlot(0);
   if (input.consumeJustPressed("Digit2")) game.equipSlot(1);

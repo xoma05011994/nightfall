@@ -6,10 +6,6 @@ import {
   ENEMY_RADIUS,
   MOMENTUM_DURATION_MS,
   MOMENTUM_MAX_STACKS,
-  PLAYER_BASE_HP,
-  PLAYER_BASE_MOVE_SPEED,
-  PLAYER_BASE_PICKUP_RADIUS,
-  PLAYER_RADIUS,
   REWARD_POPUP_LIFETIME_MS,
   WEAPON_MAX_LEVEL,
 } from "@nightfall/shared/constants";
@@ -20,11 +16,12 @@ import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
 import { stepAura, stepBurningEnemies } from "@nightfall/shared/systems/statusEffects";
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
-import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel } from "@nightfall/shared/systems/xp";
+import { grantXp, spawnXpOrbForEnemy, stepXpOrbs } from "@nightfall/shared/systems/xp";
 import { rollPerkOffers } from "@nightfall/shared/systems/perks";
 import { clampToWorldBounds } from "@nightfall/shared/systems/world";
 import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
 import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
+import { createPlayer } from "@nightfall/shared/systems/player";
 import type {
   BeamEffect,
   Chest,
@@ -43,7 +40,6 @@ import type {
   WeaponId,
   WeaponPickup,
   WeaponPromptInfo,
-  WeaponSlots,
   XpOrb,
 } from "@nightfall/shared/types";
 
@@ -52,41 +48,6 @@ export interface GameCallbacks {
   onWeaponPrompt: (info: WeaponPromptInfo) => void;
   onGameOver: () => void;
   onVictory: () => void;
-}
-
-function createPlayer(): Player {
-  return {
-    position: { x: 0, y: 0 },
-    hp: PLAYER_BASE_HP,
-    maxHp: PLAYER_BASE_HP,
-    level: 1,
-    xp: 0,
-    xpToNext: xpToNextForLevel(1),
-    moveSpeed: PLAYER_BASE_MOVE_SPEED,
-    radius: PLAYER_RADIUS,
-    pickupRadius: PLAYER_BASE_PICKUP_RADIUS,
-    damageMultiplier: 1,
-    attackCooldownMultiplier: 1,
-    extraProjectiles: 0,
-    weaponSlots: [createWeaponInstance("pistol"), null, null] as WeaponSlots,
-    equippedSlot: 0,
-    pierce: 0,
-    igniteDamagePerTick: 0,
-    igniteDurationMs: 0,
-    lightningChainDamage: 0,
-    lightningChainRadius: 0,
-    auraDamagePerTick: 0,
-    auraRadius: 0,
-    auraTickTimerMs: 0,
-    lifeStealPercent: 0,
-    berserkerIntensity: 0,
-    momentumStacks: 0,
-    momentumTimerMs: 0,
-    momentumFireRatePerStack: 0,
-    auraAppliesIgnite: false,
-    auraTriggersLightning: false,
-    goldMultiplier: 1,
-  };
 }
 
 export class Game {
