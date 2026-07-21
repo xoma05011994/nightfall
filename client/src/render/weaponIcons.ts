@@ -1,4 +1,4 @@
-import type { WeaponId } from "../types";
+import type { WeaponId } from "@nightfall/shared/types";
 
 // Hand-drawn Canvas2D silhouettes for world weapon pickups — distinct per
 // weapon so drops read at a glance instead of all looking like the same

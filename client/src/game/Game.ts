@@ -12,19 +12,19 @@ import {
   PLAYER_RADIUS,
   REWARD_POPUP_LIFETIME_MS,
   WEAPON_MAX_LEVEL,
-} from "../constants";
-import { mulberry32, normalize } from "../math";
-import { createBoss, createEnemy, currentSpawnIntervalMs, pickEnemyType, spawnPositionAround } from "../systems/spawner";
-import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "../systems/combat";
-import { collectDeadEnemies } from "../systems/enemies";
-import { stepAura, stepBurningEnemies } from "../systems/statusEffects";
-import { findTouchedChest, rollChestReward, spawnChest } from "../systems/chests";
-import { weaponDamageMultiplier } from "../systems/profile";
-import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel } from "../systems/xp";
-import { rollPerkOffers } from "../systems/perks";
-import { clampToWorldBounds } from "../systems/world";
-import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "../systems/weaponDrops";
-import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "../systems/weapons";
+} from "@nightfall/shared/constants";
+import { mulberry32, normalize } from "@nightfall/shared/math";
+import { createBoss, createEnemy, currentSpawnIntervalMs, pickEnemyType, spawnPositionAround } from "@nightfall/shared/systems/spawner";
+import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "@nightfall/shared/systems/combat";
+import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
+import { stepAura, stepBurningEnemies } from "@nightfall/shared/systems/statusEffects";
+import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
+import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
+import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel } from "@nightfall/shared/systems/xp";
+import { rollPerkOffers } from "@nightfall/shared/systems/perks";
+import { clampToWorldBounds } from "@nightfall/shared/systems/world";
+import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
+import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
 import type {
   BeamEffect,
   Chest,
@@ -45,7 +45,7 @@ import type {
   WeaponPromptInfo,
   WeaponSlots,
   XpOrb,
-} from "../types";
+} from "@nightfall/shared/types";
 
 export interface GameCallbacks {
   onLevelUp: (offers: Perk[]) => void;

@@ -1,4 +1,4 @@
-import type { Perk } from "../types";
+import type { Perk } from "@nightfall/shared/types";
 
 export class PerkModal {
   private root: HTMLDivElement;

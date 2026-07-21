@@ -1,5 +1,5 @@
-import { normalize } from "../math";
-import type { Vec2 } from "../types";
+import { normalize } from "@nightfall/shared/math";
+import type { Vec2 } from "@nightfall/shared/types";
 
 const MOVE_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]);
 

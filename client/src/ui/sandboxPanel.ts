@@ -1,7 +1,7 @@
-import { WEAPON_MAX_LEVEL } from "../constants";
-import { PERKS } from "../systems/perks";
-import { DROPPABLE_WEAPON_IDS, WEAPON_DEFS } from "../systems/weapons";
-import type { EnemyType, Perk, WeaponId } from "../types";
+import { WEAPON_MAX_LEVEL } from "@nightfall/shared/constants";
+import { PERKS } from "@nightfall/shared/systems/perks";
+import { DROPPABLE_WEAPON_IDS, WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
+import type { EnemyType, Perk, WeaponId } from "@nightfall/shared/types";
 
 export interface SandboxHandlers {
   onSpawnEnemy: (type: EnemyType) => void;

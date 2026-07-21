@@ -1,6 +1,6 @@
-import { MAX_WEAPON_UPGRADE_LEVEL, getWeaponUpgradeLevel, upgradeCost, type PlayerProfile } from "../systems/profile";
-import { WEAPON_DEFS } from "../systems/weapons";
-import type { WeaponId } from "../types";
+import { MAX_WEAPON_UPGRADE_LEVEL, getWeaponUpgradeLevel, upgradeCost, type PlayerProfile } from "@nightfall/shared/systems/profile";
+import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
+import type { WeaponId } from "@nightfall/shared/types";
 
 const ALL_WEAPON_IDS: WeaponId[] = ["pistol", "shotgun", "assaultRifle", "rpg", "laserCannon", "flamethrower"];
 

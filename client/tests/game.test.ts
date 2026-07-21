@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ADVENTURE_BOSS_1_TRIGGER_MS, ADVENTURE_DURATION_MS, WEAPON_MAX_LEVEL } from "../src/constants";
+import { ADVENTURE_BOSS_1_TRIGGER_MS, ADVENTURE_DURATION_MS, WEAPON_MAX_LEVEL } from "@nightfall/shared/constants";
 import { Game } from "../src/game/Game";
-import { getLevelById } from "../src/systems/levels";
-import { getPerkById } from "../src/systems/perks";
-import { WEAPON_DEFS } from "../src/systems/weapons";
-import type { GameMode } from "../src/types";
+import { getLevelById } from "@nightfall/shared/systems/levels";
+import { getPerkById } from "@nightfall/shared/systems/perks";
+import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
+import type { GameMode } from "@nightfall/shared/types";
 
 function makeGame(seed?: number, mode: GameMode = "endless") {
   const callbacks = {

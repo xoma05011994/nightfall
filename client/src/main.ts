@@ -13,11 +13,11 @@ import { SandboxPanel } from "./ui/sandboxPanel";
 import { PerkTreeScreen } from "./ui/perkTreeScreen";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
-import { LEVELS } from "./systems/levels";
-import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "./systems/profile";
-import { WEAPON_DEFS, isWeaponMaxLevel } from "./systems/weapons";
-import { normalize } from "./math";
-import type { GameMode, LevelDef } from "./types";
+import { LEVELS } from "@nightfall/shared/systems/levels";
+import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
+import { WEAPON_DEFS, isWeaponMaxLevel } from "@nightfall/shared/systems/weapons";
+import { normalize } from "@nightfall/shared/math";
+import type { GameMode, LevelDef } from "@nightfall/shared/types";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root")!;

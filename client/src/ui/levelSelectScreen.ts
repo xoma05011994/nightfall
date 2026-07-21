@@ -1,4 +1,4 @@
-import type { LevelDef } from "../types";
+import type { LevelDef } from "@nightfall/shared/types";
 
 export class LevelSelectScreen {
   private root: HTMLDivElement;

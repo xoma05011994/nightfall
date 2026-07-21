@@ -1,5 +1,5 @@
-import { PERKS, perkTier } from "../systems/perks";
-import type { Perk } from "../types";
+import { PERKS, perkTier } from "@nightfall/shared/systems/perks";
+import type { Perk } from "@nightfall/shared/types";
 
 // Read-only review screen — groups every perk by dependency depth (tier 0 =
 // no prerequisites) so the whole tree can be eyeballed for correctness in
