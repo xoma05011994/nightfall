@@ -29,7 +29,7 @@ import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel, type XpProgr
 import { rollPerkOffers } from "@nightfall/shared/systems/perks";
 import { clampToWorldBounds } from "@nightfall/shared/systems/world";
 import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
-import { WEAPON_DEFS, createWeaponInstance, fireWeapon, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
+import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
 import { createPlayer } from "@nightfall/shared/systems/player";
 import type {
   BeamEffect,
@@ -44,7 +44,7 @@ import type {
   WeaponPickup,
   XpOrb,
 } from "@nightfall/shared/types";
-import type { ClientMessage, MatchSnapshot, PlayerInputDTO, ServerMessage } from "@nightfall/shared/multiplayer";
+import type { ClientMessage, MatchPhase, MatchSnapshot, PlayerInputDTO, ServerMessage } from "@nightfall/shared/multiplayer";
 
 interface PlayerRecord {
   ws: WebSocket | null;
@@ -115,6 +115,11 @@ export class Room {
   // dropped connection may just be a brief network blip.
   private emptyStartMs: number | null = null;
 
+  // Lifecycle phase: a new room waits in "lobby" (players gather, no
+  // simulation) until the host starts it; any player can pause/resume,
+  // which freezes the whole party's sim server-side.
+  private phase: MatchPhase = "lobby";
+
   private rng = mulberry32(Date.now() >>> 0);
   private tick = 0;
   private elapsedMs = 0;
@@ -142,6 +147,14 @@ export class Room {
 
   private countConnected(): number {
     return this.connectedEntries().length;
+  }
+
+  // The host is simply the longest-connected player still present — Map
+  // preserves insertion order, so the first connected entry is the room's
+  // creator (or, if they left, whoever's been in longest). Only the host's
+  // startGame is honored. Empty string if nobody's connected.
+  private hostId(): string {
+    return this.connectedEntries()[0]?.[0] ?? "";
   }
 
   // Returns an error reason if the connection should be rejected, else null.
@@ -192,6 +205,19 @@ export class Room {
       if (existing) existing.count += 1;
       else rec.pickedPerks.push({ perk, count: 1 });
       rec.pendingOffers = null;
+    } else if (msg.type === "equipSlot") {
+      // Only switch to an occupied slot (mirrors solo Game.equipSlot).
+      if (rec.player.weaponSlots[msg.payload.slot]) rec.player.equippedSlot = msg.payload.slot;
+    } else if (msg.type === "reload") {
+      const instance = rec.player.weaponSlots[rec.player.equippedSlot];
+      if (instance) startReload(instance, WEAPON_DEFS[instance.weaponId]);
+    } else if (msg.type === "startGame") {
+      // Only the host can start, and only out of the lobby.
+      if (this.phase === "lobby" && playerId === this.hostId()) this.phase = "playing";
+    } else if (msg.type === "pause") {
+      if (this.phase === "playing") this.phase = "paused";
+    } else if (msg.type === "resume") {
+      if (this.phase === "paused") this.phase = "playing";
     }
   }
 
@@ -316,6 +342,10 @@ export class Room {
       this.emptyStartMs = null;
     }
 
+    // Steps 1–8 (the whole simulation) only run while playing. In "lobby"
+    // (waiting for the host to start) and "paused" the world stays frozen —
+    // we still broadcast below so clients see the lobby / paused state.
+    if (this.phase === "playing") {
     // 1. Movement, weapon cooldowns, momentum decay — per player.
     for (const [, rec] of connected) {
       const input = rec.input;
@@ -481,6 +511,7 @@ export class Room {
 
       this.elapsedMs += dt * 1000;
     }
+    } // end simulation (only ran while phase === "playing")
 
     // Broadcast every tick, full state (not delta-compressed) — fine at
     // local-dev/small-party scale (see the M2 commit message).
@@ -488,6 +519,8 @@ export class Room {
       tick: this.tick++,
       serverTimeMs: nowMs,
       elapsedMs: this.elapsedMs,
+      phase: this.phase,
+      hostId: this.hostId(),
       players: connected.map(([id, rec]) => ({ id, displayName: rec.displayName, player: rec.player })),
       enemies: this.enemies,
       projectiles: this.projectiles,

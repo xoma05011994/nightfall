@@ -3,6 +3,16 @@ import type { Vec2 } from "@nightfall/shared/types";
 
 const MOVE_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]);
 
+// True when the keyboard event is destined for a text field (the name /
+// room-code inputs) — the game must not intercept or preventDefault those
+// keys, or the field can't be typed into (WASD, in particular).
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
+
 // WASD (+ arrow keys) for movement, mouse for aim/fire, 1/2/3 for weapon
 // slots, R to reload. No camera rotation — the player always faces the
 // cursor, and since the camera keeps the player pinned at the screen
@@ -16,6 +26,9 @@ export class InputManager {
 
   constructor() {
     window.addEventListener("keydown", (e) => {
+      // Let text fields (name / room-code inputs) receive keystrokes
+      // normally — otherwise WASD, etc. get preventDefaulted and swallowed.
+      if (isEditableTarget(e.target)) return;
       if (MOVE_KEYS.has(e.code)) e.preventDefault();
       if (!e.repeat && !this.pressed.has(e.code)) this.justPressed.add(e.code);
       this.pressed.add(e.code);

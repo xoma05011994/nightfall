@@ -257,28 +257,39 @@ export class Renderer {
     const ctx = this.ctx;
     for (const enemy of enemies) {
       ctx.save();
-      const spikes = enemy.isBoss ? 12 : enemy.type === "brute" ? 7 : 8;
-      const fillStyle = enemy.isBoss ? "#150a1c" : enemy.type === "brute" ? "#241209" : enemy.type === "shooter" ? "#140a1c" : "#1c0d0d";
-      const strokeStyle = enemy.isBoss ? "#7a1fa0" : enemy.type === "brute" ? "#7a3414" : enemy.type === "shooter" ? "#4ee2ff" : "#5c1414";
+      const isBrute = enemy.type === "brute";
+      const fillStyle = enemy.isBoss ? "#150a1c" : isBrute ? "#14401a" : enemy.type === "shooter" ? "#140a1c" : "#1c0d0d";
+      const strokeStyle = enemy.isBoss ? "#7a1fa0" : isBrute ? "#4fd94f" : enemy.type === "shooter" ? "#4ee2ff" : "#5c1414";
       ctx.fillStyle = fillStyle;
       ctx.beginPath();
-      for (let i = 0; i < spikes; i++) {
-        const angle = (i / spikes) * Math.PI * 2;
-        const r = i % 2 === 0 ? enemy.radius * 1.25 : enemy.radius * 0.85;
-        const x = enemy.position.x + Math.cos(angle) * r;
-        const y = enemy.position.y + Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      if (isBrute) {
+        // Brutes read as a solid green block — a deliberately blunt,
+        // "tanky" silhouette next to the other enemies' jagged stars.
+        const half = enemy.radius * 1.15;
+        ctx.rect(enemy.position.x - half, enemy.position.y - half, half * 2, half * 2);
+      } else {
+        const spikes = enemy.isBoss ? 12 : 8;
+        for (let i = 0; i < spikes; i++) {
+          const angle = (i / spikes) * Math.PI * 2;
+          const r = i % 2 === 0 ? enemy.radius * 1.25 : enemy.radius * 0.85;
+          const x = enemy.position.x + Math.cos(angle) * r;
+          const y = enemy.position.y + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
       }
-      ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = strokeStyle;
-      ctx.lineWidth = enemy.isBoss ? 3 : enemy.type === "brute" ? 2.5 : 1.5;
+      ctx.lineWidth = enemy.isBoss ? 3 : isBrute ? 2.5 : 1.5;
       if (enemy.isBoss) {
         ctx.shadowColor = "#a020f0";
         ctx.shadowBlur = 16;
       } else if (enemy.type === "shooter") {
         ctx.shadowColor = "#4ee2ff";
+        ctx.shadowBlur = 10;
+      } else if (isBrute) {
+        ctx.shadowColor = "#4fd94f";
         ctx.shadowBlur = 10;
       }
       ctx.stroke();

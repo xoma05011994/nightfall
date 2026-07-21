@@ -12,9 +12,11 @@ import { PauseModal } from "./ui/pauseModal";
 import { SandboxPanel } from "./ui/sandboxPanel";
 import { PerkTreeScreen } from "./ui/perkTreeScreen";
 import { MultiplayerScreen } from "./ui/multiplayerScreen";
+import { MultiplayerLobby } from "./ui/multiplayerLobby";
 import { InputManager } from "./input/InputManager";
 import { Game } from "./game/Game";
 import { MultiplayerGame } from "./net/MultiplayerGame";
+import type { MatchSnapshot } from "@nightfall/shared/multiplayer";
 import { LEVELS } from "@nightfall/shared/systems/levels";
 import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
 import { WEAPON_DEFS, isWeaponMaxLevel } from "@nightfall/shared/systems/weapons";
@@ -67,16 +69,13 @@ const perkTreeScreen = new PerkTreeScreen(uiRoot, () => {
   showMainMenu();
 });
 
-// v0.6 M1 — co-op Endless. inMultiplayer gates frame() between the solo
-// Game loop and the multiplayer send/render loop; they never run
-// concurrently. Movement-only for M1 — no enemies/combat/xp sync yet.
+// v0.6 co-op Endless. inMultiplayer gates frame() between the solo Game
+// loop and the multiplayer send/render loop; they never run concurrently.
+// The server drives a room phase (lobby → playing ⇄ paused); the frame
+// loop reads snapshot.phase and shows the lobby / pause overlay / game HUD
+// accordingly.
 const multiplayerGame = new MultiplayerGame();
 let inMultiplayer = false;
-// M5 — Escape opens a confirm dialog instead of leaving instantly (one
-// stray keypress shouldn't drop you from a shared co-op run). While it's
-// open, zeroed input is sent every frame so the character doesn't keep
-// walking/firing on its last held input while you decide.
-let mpLeaveConfirmOpen = false;
 
 multiplayerGame.onLevelUp((offerIds) => {
   const offers = offerIds.map((id) => getPerkById(id)).filter((p): p is NonNullable<typeof p> => p !== undefined);
@@ -99,26 +98,58 @@ uiRoot.appendChild(connStatusBadge);
 function leaveMultiplayer(): void {
   multiplayerGame.disconnect();
   inMultiplayer = false;
-  mpLeaveConfirmOpen = false;
   roomBadge.style.display = "none";
   connStatusBadge.style.display = "none";
-  multiplayerLeaveModal.hide();
+  mpPauseModal.hide();
+  multiplayerLobby.hide();
   hud.setVisible(false);
   perkTray.setVisible(false);
   showMainMenu();
 }
 
-const multiplayerLeaveModal = new PauseModal(
+// Shared pause: any player's Escape pauses the whole party server-side
+// (everyone sees GAME PAUSED). Continue resumes for everyone; Leave to Menu
+// disconnects just this player.
+const mpPauseModal = new PauseModal(
   uiRoot,
-  () => {
-    mpLeaveConfirmOpen = false;
-    multiplayerLeaveModal.hide();
-  },
-  () => {
-    leaveMultiplayer();
-  },
-  "LEAVE ROOM?",
+  () => multiplayerGame.resume(),
+  () => leaveMultiplayer(),
+  "GAME PAUSED",
 );
+
+const multiplayerLobby = new MultiplayerLobby(uiRoot, () => multiplayerGame.startGame());
+
+function updateMultiplayerHud(snapshot: MatchSnapshot): void {
+  const local = snapshot.players.find((p) => p.id === multiplayerGame.playerId)?.player;
+  if (!local) return;
+  const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
+    const slot = local.weaponSlots[i as 0 | 1 | 2];
+    return {
+      name: slot ? WEAPON_DEFS[slot.weaponId].name : null,
+      equipped: local.equippedSlot === i,
+      icon: slot ? WEAPON_DEFS[slot.weaponId].icon : null,
+      level: slot?.level ?? 1,
+      maxed: slot ? isWeaponMaxLevel(slot.level) : false,
+    };
+  }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+  const equipped = local.weaponSlots[local.equippedSlot];
+  const equippedDef = equipped ? WEAPON_DEFS[equipped.weaponId] : null;
+  hud.update({
+    hp: local.hp,
+    maxHp: local.maxHp,
+    xp: local.xp,
+    xpToNext: local.xpToNext,
+    level: local.level,
+    elapsedMs: snapshot.elapsedMs,
+    kills: 0,
+    gold: 0,
+    slots,
+    ammo: equipped?.ammo ?? 0,
+    magazineSize: equippedDef?.magazineSize ?? 1,
+    reloading: equipped?.reloading ?? false,
+    reloadRatio: equipped && equippedDef ? equipped.reloadTimerMs / equippedDef.reloadMs : 0,
+  });
+}
 
 const multiplayerScreen = new MultiplayerScreen(uiRoot, {
   onCreate: async (displayName) => {
@@ -126,8 +157,6 @@ const multiplayerScreen = new MultiplayerScreen(uiRoot, {
       const roomCode = await multiplayerGame.createRoom(displayName);
       multiplayerScreen.hide();
       inMultiplayer = true;
-      hud.setVisible(true);
-      perkTray.setVisible(true);
       roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
       roomBadge.style.display = "block";
     } catch (err) {
@@ -143,8 +172,6 @@ const multiplayerScreen = new MultiplayerScreen(uiRoot, {
       }
       multiplayerScreen.hide();
       inMultiplayer = true;
-      hud.setVisible(true);
-      perkTray.setVisible(true);
       roomBadge.innerHTML = `ROOM CODE: <span class="mp-room-code">${roomCode}</span>`;
       roomBadge.style.display = "block";
     } catch (err) {
@@ -331,49 +358,45 @@ function frame(now: number): void {
   const fireHeld = input.isFireHeld();
 
   if (inMultiplayer) {
-    if (input.consumeJustPressed("Escape")) {
-      mpLeaveConfirmOpen = !mpLeaveConfirmOpen;
-      if (mpLeaveConfirmOpen) multiplayerLeaveModal.show();
-      else multiplayerLeaveModal.hide();
-    }
     connStatusBadge.style.display = multiplayerGame.connStatus === "disconnected" ? "block" : "none";
-    if (mpLeaveConfirmOpen) {
-      multiplayerGame.sendInput(dt, { x: 0, y: 0 }, { x: 0, y: 0 }, false);
-    } else {
-      multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
-    }
     const snapshot = multiplayerGame.latestSnapshot;
-    if (snapshot) {
-      renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
-      const local = snapshot.players.find((p) => p.id === multiplayerGame.playerId)?.player;
-      if (local) {
-        const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
-          const slot = local.weaponSlots[i as 0 | 1 | 2];
-          return {
-            name: slot ? WEAPON_DEFS[slot.weaponId].name : null,
-            equipped: local.equippedSlot === i,
-            icon: slot ? WEAPON_DEFS[slot.weaponId].icon : null,
-            level: slot?.level ?? 1,
-            maxed: slot ? isWeaponMaxLevel(slot.level) : false,
-          };
-        }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
-        const equipped = local.weaponSlots[local.equippedSlot];
-        const equippedDef = equipped ? WEAPON_DEFS[equipped.weaponId] : null;
-        hud.update({
-          hp: local.hp,
-          maxHp: local.maxHp,
-          xp: local.xp,
-          xpToNext: local.xpToNext,
-          level: local.level,
-          elapsedMs: snapshot.elapsedMs,
-          kills: 0,
-          gold: 0,
-          slots,
-          ammo: equipped?.ammo ?? 0,
-          magazineSize: equippedDef?.magazineSize ?? 1,
-          reloading: equipped?.reloading ?? false,
-          reloadRatio: equipped && equippedDef ? equipped.reloadTimerMs / equippedDef.reloadMs : 0,
-        });
+    const phase = snapshot?.phase ?? "lobby";
+
+    if (phase === "lobby") {
+      multiplayerLobby.show();
+      mpPauseModal.hide();
+      hud.setVisible(false);
+      if (snapshot) {
+        multiplayerLobby.update(
+          snapshot.players.map((p) => ({ id: p.id, displayName: p.displayName })),
+          snapshot.hostId,
+          multiplayerGame.playerId,
+        );
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+      }
+    } else if (phase === "paused") {
+      multiplayerLobby.hide();
+      mpPauseModal.show();
+      hud.setVisible(true);
+      if (input.consumeJustPressed("Escape")) multiplayerGame.resume();
+      if (snapshot) {
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+        updateMultiplayerHud(snapshot);
+      }
+    } else {
+      // playing
+      multiplayerLobby.hide();
+      mpPauseModal.hide();
+      hud.setVisible(true);
+      if (input.consumeJustPressed("Escape")) multiplayerGame.pause();
+      if (input.consumeJustPressed("Digit1")) multiplayerGame.equipSlot(0);
+      if (input.consumeJustPressed("Digit2")) multiplayerGame.equipSlot(1);
+      if (input.consumeJustPressed("Digit3")) multiplayerGame.equipSlot(2);
+      if (input.consumeJustPressed("KeyR")) multiplayerGame.reload();
+      multiplayerGame.sendInput(dt, moveVector, aimDir, fireHeld);
+      if (snapshot) {
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+        updateMultiplayerHud(snapshot);
       }
     }
     requestAnimationFrame(frame);

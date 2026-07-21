@@ -7,8 +7,16 @@ export interface MainMenuHandlers {
   onMultiplayer: () => void;
 }
 
+// SANDBOX and PERK TREE are dev/inspection tools, hidden from the menu until
+// the player types this secret while the menu is up (a classic cheat-code
+// reveal). Persisted for the session once unlocked.
+const SECRET_CODE = "qwerty";
+
 export class MainMenu {
   private root: HTMLDivElement;
+  private secretButtons: HTMLElement[];
+  private typedBuffer = "";
+  private unlocked = false;
 
   constructor(container: HTMLElement, handlers: MainMenuHandlers) {
     this.root = document.createElement("div");
@@ -24,8 +32,8 @@ export class MainMenu {
         <button class="overlay-button" data-action="adventure">ADVENTURE</button>
         <button class="overlay-button" data-action="multiplayer">MULTIPLAYER</button>
         <button class="overlay-button" data-action="shop">ARMORY</button>
-        <button class="overlay-button" data-action="sandbox">SANDBOX</button>
-        <button class="overlay-button" data-action="perkTree">PERK TREE</button>
+        <button class="overlay-button" data-action="sandbox" style="display:none">SANDBOX</button>
+        <button class="overlay-button" data-action="perkTree" style="display:none">PERK TREE</button>
       </div>
     `;
     container.appendChild(this.root);
@@ -35,6 +43,21 @@ export class MainMenu {
     this.root.querySelector('[data-action="shop"]')!.addEventListener("click", handlers.onShop);
     this.root.querySelector('[data-action="sandbox"]')!.addEventListener("click", handlers.onSandbox);
     this.root.querySelector('[data-action="perkTree"]')!.addEventListener("click", handlers.onPerkTree);
+
+    this.secretButtons = [this.root.querySelector('[data-action="sandbox"]')!, this.root.querySelector('[data-action="perkTree"]')!];
+
+    window.addEventListener("keydown", (e) => {
+      // Only listen while the menu is actually up, and ignore modifier/long
+      // keys so only real character typing advances the sequence.
+      if (this.unlocked || this.root.style.display === "none" || e.key.length !== 1) return;
+      this.typedBuffer = (this.typedBuffer + e.key.toLowerCase()).slice(-SECRET_CODE.length);
+      if (this.typedBuffer === SECRET_CODE) this.reveal();
+    });
+  }
+
+  private reveal(): void {
+    this.unlocked = true;
+    for (const btn of this.secretButtons) btn.style.display = "";
   }
 
   show(): void {

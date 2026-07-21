@@ -161,6 +161,27 @@ export class MultiplayerGame {
     this.send({ type: "chooseUpgrade", payload: { perkId } });
   }
 
+  equipSlot(slot: 0 | 1 | 2): void {
+    this.send({ type: "equipSlot", payload: { slot } });
+  }
+
+  reload(): void {
+    this.send({ type: "reload" });
+  }
+
+  // Host-only server-side; a non-host's startGame is simply ignored.
+  startGame(): void {
+    this.send({ type: "startGame" });
+  }
+
+  pause(): void {
+    this.send({ type: "pause" });
+  }
+
+  resume(): void {
+    this.send({ type: "resume" });
+  }
+
   // Call once per frame; internally throttles the actual network send to
   // INPUT_SEND_HZ so movement keys held down don't spam a message every frame.
   sendInput(dt: number, moveVector: Vec2, aimDir: Vec2, fireHeld: boolean): void {
