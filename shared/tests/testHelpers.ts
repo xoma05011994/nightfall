@@ -38,6 +38,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
     shurikenCount: 0,
     shurikenDamagePerTick: 0,
     shurikenTickTimerMs: 0,
+    shurikenSpeedMultiplier: 1,
     lightningChainCount: 0,
     auraPull: 0,
     chainAlwaysIgnites: false,

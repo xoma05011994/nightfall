@@ -5,6 +5,7 @@ import {
   CHEST_SPAWN_INTERVAL_MS,
   DAMAGE_POPUP_LIFETIME_MS,
   ENEMY_RADIUS,
+  MAX_ENEMIES_ON_SCREEN,
   MOMENTUM_DURATION_MS,
   MOMENTUM_MAX_STACKS,
   REWARD_POPUP_LIFETIME_MS,
@@ -261,9 +262,11 @@ export class Game {
       this.spawnTimerMs -= dt * 1000;
       if (this.spawnTimerMs <= 0) {
         this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
-        const pos = spawnPositionAround(this.player.position, this.rng);
-        const type = pickEnemyType(this.elapsedMs, this.rng);
-        this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+        if (this.enemies.length < MAX_ENEMIES_ON_SCREEN) {
+          const pos = spawnPositionAround(this.player.position, this.rng);
+          const type = pickEnemyType(this.elapsedMs, this.rng);
+          this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+        }
       }
 
       this.chestSpawnTimerMs -= dt * 1000;

@@ -5,6 +5,7 @@ import {
   DAMAGE_POPUP_LIFETIME_MS,
   ENEMY_RADIUS,
   MATCH_TICK_MS,
+  MAX_ENEMIES_ON_SCREEN,
   MAX_PARTY_SIZE,
   MOMENTUM_DURATION_MS,
   MOMENTUM_MAX_STACKS,
@@ -565,10 +566,12 @@ export class Room {
       this.spawnTimerMs -= dt * 1000;
       if (this.spawnTimerMs <= 0) {
         this.spawnTimerMs = currentSpawnIntervalMs(this.elapsedMs);
-        const anchor = spawnAnchors[Math.floor(this.rng() * spawnAnchors.length)]![1].player.position;
-        const pos = spawnPositionAround(anchor, this.rng);
-        const type = pickEnemyType(this.elapsedMs, this.rng);
-        this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+        if (this.enemies.length < MAX_ENEMIES_ON_SCREEN) {
+          const anchor = spawnAnchors[Math.floor(this.rng() * spawnAnchors.length)]![1].player.position;
+          const pos = spawnPositionAround(anchor, this.rng);
+          const type = pickEnemyType(this.elapsedMs, this.rng);
+          this.enemies.push(createEnemy(this.nextEnemyId++, type, clampToWorldBounds(pos, ENEMY_RADIUS), this.elapsedMs));
+        }
       }
 
       this.chestSpawnTimerMs -= dt * 1000;

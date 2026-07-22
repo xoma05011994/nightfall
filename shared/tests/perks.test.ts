@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 22 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(22);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(22);
+  it("has exactly 23 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(23);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(23);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -171,6 +171,15 @@ describe("PERKS", () => {
     expect(player.shurikenDamagePerTick).toBe(10);
   });
 
+  it("blade storm perk multiplies shuriken orbit speed and requires Shurikens", () => {
+    const player = makePlayer();
+    getPerkById("bladeStorm")!.apply(player, 1);
+    expect(player.shurikenSpeedMultiplier).toBeCloseTo(1.35, 5);
+    getPerkById("bladeStorm")!.apply(player, 2);
+    expect(player.shurikenSpeedMultiplier).toBeCloseTo(1.8225, 5);
+    expect(getPerkById("bladeStorm")!.requires).toEqual(["shurikens"]);
+  });
+
   it("vortex perk adds aura pull and requires Deadly Aura + Shurikens", () => {
     const player = makePlayer();
     getPerkById("vortex")!.apply(player, 1);
@@ -302,6 +311,10 @@ describe("perkTier", () => {
 
   it("is 1 for vortex (requires tier-0 aura plus tier-0 shurikens)", () => {
     expect(perkTier("vortex")).toBe(1);
+  });
+
+  it("is 1 for blade storm (requires only tier-0 shurikens)", () => {
+    expect(perkTier("bladeStorm")).toBe(1);
   });
 
   it("is 2 for cascade (requires tier-1 stormConduit)", () => {

@@ -283,25 +283,28 @@ export class Renderer {
   private drawShurikens(player: Player, nowMs: number): void {
     if (player.shurikenCount <= 0) return;
     const ctx = this.ctx;
-    const spin = nowMs / 120; // each blade's own rotation, independent of orbit angle
+    // Each blade's own rotation, independent of orbit angle — scales with
+    // Blade Storm's speed multiplier too, so a faster orbit also looks like
+    // it's spinning faster rather than gliding around unnaturally.
+    const spin = (nowMs / 120) * player.shurikenSpeedMultiplier;
     for (let i = 0; i < player.shurikenCount; i++) {
-      const angle = shurikenAngle(i, player.shurikenCount, nowMs);
+      const angle = shurikenAngle(i, player.shurikenCount, nowMs, player.shurikenSpeedMultiplier);
       const x = player.position.x + Math.cos(angle) * SHURIKEN_ORBIT_RADIUS;
       const y = player.position.y + Math.sin(angle) * SHURIKEN_ORBIT_RADIUS;
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(spin);
       ctx.shadowColor = "#c0c8d8";
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = "#8fa0b8";
       ctx.strokeStyle = "#e8edf5";
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       for (let p = 0; p < 4; p++) {
         const a = (p / 4) * Math.PI * 2;
-        const outer = { x: Math.cos(a) * 9, y: Math.sin(a) * 9 };
+        const outer = { x: Math.cos(a) * 14, y: Math.sin(a) * 14 };
         const innerA = a + Math.PI / 4;
-        const inner = { x: Math.cos(innerA) * 3, y: Math.sin(innerA) * 3 };
+        const inner = { x: Math.cos(innerA) * 5, y: Math.sin(innerA) * 5 };
         if (p === 0) ctx.moveTo(outer.x, outer.y);
         else ctx.lineTo(outer.x, outer.y);
         ctx.lineTo(inner.x, inner.y);

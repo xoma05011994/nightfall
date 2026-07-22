@@ -22,6 +22,12 @@ export const ENEMY_CONTACT_COOLDOWN_MS = 700;
 // Enemy hp/damage scale gently with elapsed run time so late runs stay
 // dangerous without needing a discrete wave-index system for v0.1/v0.2.
 export const ENEMY_SCALE_PERIOD_MS = 120_000; // time to reach +100% stats
+// v0.9 — hard ceiling on live enemies, mainly a perf/readability safety net
+// for very long Endless runs where the spawn interval has ramped all the
+// way down. Only gates the regular periodic spawn timer — bosses (rare,
+// deliberate set-pieces) and Sandbox's manual spawn buttons (a debug tool,
+// including for stress-testing) both bypass it.
+export const MAX_ENEMIES_ON_SCREEN = 500;
 
 export const XP_ORB_RADIUS = 6;
 export const XP_ORB_BASE_VALUE = 5;
@@ -43,7 +49,8 @@ export const FENCE_POST_SPACING = 70;
 // 5 pickup-only weapons (uniformly chosen among them).
 // v0.5 — halved: weapon leveling (picking up a duplicate) makes drops more
 // valuable per-drop, so they need to be rarer to stay a special event.
-export const WEAPON_DROP_CHANCE = 0.03;
+// v0.9 — nudged back up slightly; 0.03 felt a little too rare in practice.
+export const WEAPON_DROP_CHANCE = 0.045;
 export const WEAPON_PICKUP_RADIUS = 20;
 
 // v0.3 — ignite (burn DoT) and deadly aura perks tick on a fixed interval
@@ -52,14 +59,17 @@ export const WEAPON_PICKUP_RADIUS = 20;
 export const IGNITE_TICK_MS = 500;
 export const AURA_TICK_MS = 400;
 
-// v0.82 — Shurikens perk: blades orbit the player at a fixed radius/angular
-// speed (both flat, not rank-scaled — only count and damage grow with
-// rank) and deal damage on a fixed tick, same "sample on an interval"
-// pattern as Deadly Aura rather than continuous per-frame collision.
+// v0.82 — Shurikens perk: blades orbit the player at a fixed radius/base
+// angular speed and deal damage on a fixed tick, same "sample on an
+// interval" pattern as Deadly Aura rather than continuous per-frame
+// collision. Count grows with Shurikens' own rank; speed grows with the
+// separate Blade Storm perk's rank (player.shurikenSpeedMultiplier).
+// v0.9 — blades themselves got visually bigger (see renderer.ts's
+// drawShurikens), so the hit radius grew to match.
 export const SHURIKEN_TICK_MS = 200;
 export const SHURIKEN_ORBIT_RADIUS = 70;
-export const SHURIKEN_ORBIT_SPEED = 3; // radians/sec
-export const SHURIKEN_HIT_RADIUS = 14;
+export const SHURIKEN_ORBIT_SPEED = 3; // radians/sec, before shurikenSpeedMultiplier
+export const SHURIKEN_HIT_RADIUS = 18;
 export const SHURIKEN_BASE_DAMAGE = 5;
 
 // v0.6 M4 — Chain Link (multiplayer-only perk): a laser drawn between each

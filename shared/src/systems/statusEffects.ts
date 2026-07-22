@@ -170,9 +170,14 @@ export function stepAura(player: Player, enemies: Enemy[], dt: number, lightning
 // The i-th of `count` shurikens' current orbit position angle — a pure
 // function of elapsed time, not any stored per-shuriken state, so the
 // server tick and the client's render loop compute identical positions
-// from the same (index, count, nowMs) without needing to sync anything.
-export function shurikenAngle(index: number, count: number, nowMs: number): number {
-  return (nowMs / 1000) * SHURIKEN_ORBIT_SPEED + (index / count) * Math.PI * 2;
+// from the same (index, count, nowMs, speedMultiplier) without needing to
+// sync anything. Note: since this is absolute-time-based rather than an
+// accumulated phase, changing speedMultiplier mid-run (picking a Blade
+// Storm rank) causes a one-time visual snap to the blades' position —
+// acceptable in exchange for not needing any persisted per-player phase
+// state or extra network sync.
+export function shurikenAngle(index: number, count: number, nowMs: number, speedMultiplier: number = 1): number {
+  return (nowMs / 1000) * SHURIKEN_ORBIT_SPEED * speedMultiplier + (index / count) * Math.PI * 2;
 }
 
 // Shurikens perk — blades orbiting the player, damaging anything they sweep
@@ -187,7 +192,7 @@ export function stepShurikens(player: Player, enemies: Enemy[], dt: number, nowM
   player.shurikenTickTimerMs += SHURIKEN_TICK_MS;
 
   for (let i = 0; i < player.shurikenCount; i++) {
-    const angle = shurikenAngle(i, player.shurikenCount, nowMs);
+    const angle = shurikenAngle(i, player.shurikenCount, nowMs, player.shurikenSpeedMultiplier);
     const point = {
       x: player.position.x + Math.cos(angle) * SHURIKEN_ORBIT_RADIUS,
       y: player.position.y + Math.sin(angle) * SHURIKEN_ORBIT_RADIUS,

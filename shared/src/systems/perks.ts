@@ -207,6 +207,16 @@ export const PERKS: Perk[] = [
     },
   },
   {
+    id: "bladeStorm",
+    name: "Blade Storm",
+    description: "Shurikens spin faster — requires Shurikens",
+    icon: '<polygon points="12,2 15,9 22,12 15,15 12,22 9,15 2,12 9,9" fill="currentColor" opacity="0.55"/><path d="M12 2a10 10 0 1 1 -7.1 2.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="4,2 4.9,4.9 2,5.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    requires: ["shurikens"],
+    apply: (p) => {
+      p.shurikenSpeedMultiplier *= 1.35;
+    },
+  },
+  {
     id: "vortex",
     name: "Vortex",
     description: "Deadly Aura also drags enemies caught in it toward you — requires Deadly Aura and Shurikens",

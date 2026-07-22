@@ -234,6 +234,18 @@ describe("shurikenAngle", () => {
     // of the shared orbit-speed term (which cancels out in the difference).
     expect(a1 - a0).toBeCloseTo(Math.PI / 2, 10);
   });
+
+  it("defaults to a speed multiplier of 1 when omitted", () => {
+    expect(shurikenAngle(0, 1, 1000)).toBeCloseTo(shurikenAngle(0, 1, 1000, 1), 10);
+  });
+
+  it("scales the orbit angle by the speed multiplier (Blade Storm)", () => {
+    const base = shurikenAngle(0, 1, 1000, 1);
+    const doubled = shurikenAngle(0, 1, 1000, 2);
+    // Both start from the same 0-angle at index 0, so doubling speed
+    // exactly doubles the accumulated angle at a given instant.
+    expect(doubled).toBeCloseTo(base * 2, 10);
+  });
 });
 
 describe("stepShurikens", () => {

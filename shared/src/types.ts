@@ -83,14 +83,17 @@ export interface Player {
   // — contributes to the party's shared inter-player laser damage; see
   // systems/chainLink.ts. Always 0 in solo.
   chainLinkDamagePerTick: number;
-  // Shurikens perk — blades orbiting the player at a fixed radius/speed
-  // (see constants.ts's SHURIKEN_* and systems/statusEffects.ts's
+  // Shurikens perk — blades orbiting the player at a fixed radius (see
+  // constants.ts's SHURIKEN_* and systems/statusEffects.ts's
   // stepShurikens), damaging any enemy they sweep through. Positions are
-  // derived purely from elapsed time + count, so nothing about them needs
-  // to be stored beyond count/damage/the tick timer.
+  // derived purely from elapsed time + count + speed, so nothing about
+  // them needs to be stored beyond count/damage/speed/the tick timer.
   shurikenCount: number;
   shurikenDamagePerTick: number;
   shurikenTickTimerMs: number;
+  // Blade Storm perk (requires Shurikens) — multiplies the blades' orbit
+  // speed. 1 = base SHURIKEN_ORBIT_SPEED, unmodified.
+  shurikenSpeedMultiplier: number;
   // How many additional enemies a Chain Lightning arc jumps to beyond the
   // first (1 = just the initial hit's nearest target, matching the
   // original single-jump behavior) — grows with Chain Lightning's rank.
