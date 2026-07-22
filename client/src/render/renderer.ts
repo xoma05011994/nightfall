@@ -1,8 +1,16 @@
 import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
 import { drawWeaponIcon } from "./weaponIcons";
+import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, type PlayerColor } from "./entityIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
+
+// A co-op teammate to render, with the color assigned by their index in the
+// room's player list (see renderMultiplayer) — not part of the server's
+// MatchSnapshot contract, purely a client-side rendering concern.
+export interface RemotePlayerRenderInfo extends PlayerSnapshot {
+  color: PlayerColor;
+}
 
 const DEFAULT_PALETTE: LevelPalette = { bg: "#1c1310", splatterRGB: "139, 0, 0", fence: "#3a2416" };
 
@@ -26,7 +34,11 @@ export interface RenderState {
   rewardPopups: RewardPopupEffect[];
   // Co-op only — the rest of the party, drawn alongside the local player.
   // Undefined/empty in solo.
-  otherPlayers?: PlayerSnapshot[];
+  otherPlayers?: RemotePlayerRenderInfo[];
+  // Which knight-color sprite to draw the local player as. Solo always
+  // omits this (defaults to "blue"); co-op sets it from the local player's
+  // index in the room's player list, same scheme as otherPlayers' colors.
+  playerColor?: PlayerColor;
 }
 
 const SPLATTER_FIELD_HALF_SIZE = 4000;
@@ -37,6 +49,29 @@ const LIGHTNING_EFFECT_LIFETIME_MS = 200;
 const LIGHTNING_SEGMENTS = 6;
 const LIGHTNING_JITTER = 14;
 const WEAPON_ICON_WORLD_SCALE = 3.5;
+
+// On-screen max-dimension (px) for each raster sprite, independent of the
+// small collision-only radius those entities use for physics — matches the
+// weapon icons' precedent of drawing noticeably larger than the hitbox so
+// the art actually reads.
+const PLAYER_ICON_SIZE = 84;
+const CHEST_ICON_SIZE = 85;
+const ENEMY_ICON_SIZES: Record<Enemy["type"], number> = {
+  grunt: 70,
+  brute: 100,
+  shooter: 70,
+  boss: 170,
+};
+// How far above each enemy's position its hp bar/label sits — hand-tuned
+// per type since the sprites' actual pixel heights don't scale linearly
+// with ENEMY_ICON_SIZES (some are wider than tall, some taller than wide).
+const ENEMY_HP_BAR_OFFSET: Record<Enemy["type"], number> = {
+  grunt: 45,
+  brute: 62,
+  shooter: 38,
+  boss: 95,
+};
+const BOSS_LABEL_OFFSET = 112;
 
 // Simple deterministic hash-based PRNG so a bolt's zigzag stays stable across
 // frames while it fades, without needing to store per-segment jitter values.
@@ -119,7 +154,7 @@ export class Renderer {
     this.drawProjectiles(state.projectiles);
     this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
-    this.drawPlayer(state.player, nowMs);
+    this.drawPlayer(state.player, state.playerColor ?? "blue", nowMs);
     if (state.otherPlayers) {
       for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
     }
@@ -135,12 +170,16 @@ export class Renderer {
   // drawn via drawRemotePlayer) and delegates to the normal render() — this
   // keeps one drawing pipeline for both solo and multiplayer.
   renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, nowMs: number): void {
-    const local = snapshot.players.find((p) => p.id === localPlayerId);
-    if (!local) return;
-    const otherPlayers = snapshot.players.filter((p) => p.id !== localPlayerId);
+    const localIndex = snapshot.players.findIndex((p) => p.id === localPlayerId);
+    if (localIndex === -1) return;
+    const local = snapshot.players[localIndex]!;
+    const otherPlayers = snapshot.players
+      .map((p, i) => ({ ...p, color: playerColorForIndex(i) }))
+      .filter((p) => p.id !== localPlayerId);
     this.render(
       {
         player: local.player,
+        playerColor: playerColorForIndex(localIndex),
         enemies: snapshot.enemies,
         projectiles: snapshot.projectiles,
         enemyProjectiles: snapshot.enemyProjectiles,
@@ -157,25 +196,13 @@ export class Renderer {
     );
   }
 
-  private drawRemotePlayer(snapshot: PlayerSnapshot, nowMs: number): void {
+  private drawRemotePlayer(snapshot: RemotePlayerRenderInfo, nowMs: number): void {
     const ctx = this.ctx;
     const player = snapshot.player;
     if (player.isGhost) {
-      this.drawGhost(player, nowMs);
+      this.drawGhost(player, snapshot.color, nowMs);
     } else {
-      const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
-      ctx.save();
-      ctx.shadowColor = "#4ee2ff";
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = "#1c5c6e";
-      ctx.beginPath();
-      ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = "#d8cfc2";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
+      this.drawCharacterSprite(player, snapshot.color, nowMs);
     }
 
     ctx.save();
@@ -183,28 +210,38 @@ export class Renderer {
     ctx.font = "12px Georgia";
     ctx.textAlign = "center";
     const label = player.isGhost ? `${snapshot.displayName} (ghost)` : snapshot.displayName;
-    ctx.fillText(label, player.position.x, player.position.y - player.radius - 10);
+    ctx.fillText(label, player.position.x, player.position.y - PLAYER_ICON_SIZE * 0.62);
     ctx.restore();
   }
 
-  // A downed player: a translucent, faintly pulsing wisp — clearly "not
-  // really here" versus a living player's solid disc.
-  private drawGhost(player: Player, nowMs: number): void {
+  // The knight sprite for a living player — a colored glow behind it keeps
+  // party members readable at a glance even before you notice the outfit
+  // color (mirrors the old plain-circle glow this replaced).
+  private drawCharacterSprite(player: Player, color: PlayerColor, nowMs: number): void {
     const ctx = this.ctx;
-    const pulse = 1 + Math.sin(nowMs / 400) * 0.12;
+    const pulse = 1 + Math.sin(nowMs / 260) * 0.03;
+    const glow = color === "blue" ? "#4ee2ff" : color === "gold" ? "#ffcf4a" : color === "green" ? "#6fe86f" : "#ff5a5a";
     ctx.save();
-    ctx.globalAlpha = 0.45;
-    ctx.shadowColor = "#bcd4ff";
+    ctx.translate(player.position.x, player.position.y);
+    ctx.shadowColor = glow;
     ctx.shadowBlur = 14;
-    ctx.fillStyle = "#8fb4e8";
-    ctx.beginPath();
-    ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = "#dbe8ff";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    drawEntityIcon(ctx, getCharacterImage(color), PLAYER_ICON_SIZE * pulse);
+    ctx.restore();
+  }
+
+  // A downed player: the same knight sprite, desaturated and blue-shifted
+  // via canvas filters, translucent and gently pulsing — clearly "not
+  // really here" versus a living party member's solid, glowing sprite.
+  private drawGhost(player: Player, color: PlayerColor, nowMs: number): void {
+    const ctx = this.ctx;
+    const pulse = 1 + Math.sin(nowMs / 400) * 0.08;
+    ctx.save();
+    ctx.translate(player.position.x, player.position.y);
+    ctx.globalAlpha = 0.5;
+    ctx.filter = "grayscale(70%) brightness(1.5) saturate(1.6) hue-rotate(160deg)";
+    ctx.shadowColor = "#bcd4ff";
+    ctx.shadowBlur = 16;
+    drawEntityIcon(ctx, getCharacterImage(color), PLAYER_ICON_SIZE * pulse);
     ctx.restore();
   }
 
@@ -262,25 +299,12 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(player: Player, nowMs: number): void {
-    const ctx = this.ctx;
+  private drawPlayer(player: Player, color: PlayerColor, nowMs: number): void {
     if (player.isGhost) {
-      this.drawGhost(player, nowMs);
+      this.drawGhost(player, color, nowMs);
       return;
     }
-    const pulse = 1 + Math.sin(nowMs / 260) * 0.04;
-    ctx.save();
-    ctx.shadowColor = "#c81e1e";
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "#8b0000";
-    ctx.beginPath();
-    ctx.arc(player.position.x, player.position.y, player.radius * pulse, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#d8cfc2";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
+    this.drawCharacterSprite(player, color, nowMs);
   }
 
   private drawEnemies(enemies: Enemy[], nowMs: number): void {
@@ -288,77 +312,36 @@ export class Renderer {
     for (const enemy of enemies) {
       ctx.save();
       const isBrute = enemy.type === "brute";
-      const fillStyle = enemy.isBoss ? "#150a1c" : isBrute ? "#14401a" : enemy.type === "shooter" ? "#140a1c" : "#1c0d0d";
-      const strokeStyle = enemy.isBoss ? "#7a1fa0" : isBrute ? "#4fd94f" : enemy.type === "shooter" ? "#4ee2ff" : "#5c1414";
-      ctx.fillStyle = fillStyle;
-      ctx.beginPath();
-      if (isBrute) {
-        // Brutes read as a solid green block — a deliberately blunt,
-        // "tanky" silhouette next to the other enemies' jagged stars.
-        const half = enemy.radius * 1.15;
-        ctx.rect(enemy.position.x - half, enemy.position.y - half, half * 2, half * 2);
-      } else {
-        const spikes = enemy.isBoss ? 12 : 8;
-        for (let i = 0; i < spikes; i++) {
-          const angle = (i / spikes) * Math.PI * 2;
-          const r = i % 2 === 0 ? enemy.radius * 1.25 : enemy.radius * 0.85;
-          const x = enemy.position.x + Math.cos(angle) * r;
-          const y = enemy.position.y + Math.sin(angle) * r;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-      }
-      ctx.fill();
-      ctx.strokeStyle = strokeStyle;
-      ctx.lineWidth = enemy.isBoss ? 3 : isBrute ? 2.5 : 1.5;
-      if (enemy.isBoss) {
-        ctx.shadowColor = "#a020f0";
-        ctx.shadowBlur = 16;
-      } else if (enemy.type === "shooter") {
-        ctx.shadowColor = "#4ee2ff";
-        ctx.shadowBlur = 10;
-      } else if (isBrute) {
-        ctx.shadowColor = "#4fd94f";
-        ctx.shadowBlur = 10;
-      }
-      ctx.stroke();
+      // Kept from the old hand-drawn look — a colored glow behind each
+      // sprite still reads the threat type/rarity at a glance (purple boss,
+      // cyan shooter, green brute), same palette as before.
+      const glowColor = enemy.isBoss ? "#a020f0" : enemy.type === "shooter" ? "#4ee2ff" : isBrute ? "#4fd94f" : "#c81e1e";
+      ctx.translate(enemy.position.x, enemy.position.y);
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = enemy.isBoss ? 20 : isBrute ? 12 : 10;
+      drawEntityIcon(ctx, getEnemyImage(enemy.type), ENEMY_ICON_SIZES[enemy.type]);
       ctx.shadowBlur = 0;
 
       if (enemy.burnDamagePerTick > 0) {
         const flicker = 0.5 + Math.sin(nowMs / 90 + enemy.id) * 0.2;
         ctx.fillStyle = `rgba(255, 106, 0, ${flicker})`;
         ctx.beginPath();
-        ctx.arc(enemy.position.x, enemy.position.y, enemy.radius * 0.8, 0, Math.PI * 2);
+        ctx.arc(0, 0, enemy.radius * 0.8, 0, Math.PI * 2);
         ctx.fill();
       }
-
-      if (enemy.type === "shooter") {
-        // A glowing core hints at the ranged threat before it ever fires.
-        ctx.fillStyle = "#4ee2ff";
-        ctx.beginPath();
-        ctx.arc(enemy.position.x, enemy.position.y, enemy.radius * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      const eyeOffset = enemy.isBoss ? 8 : 4;
-      const eyeSize = enemy.isBoss ? 3 : 1.6;
-      ctx.fillStyle = enemy.isBoss ? "#e042ff" : "#c81e1e";
-      ctx.beginPath();
-      ctx.arc(enemy.position.x - eyeOffset, enemy.position.y - 2, eyeSize, 0, Math.PI * 2);
-      ctx.arc(enemy.position.x + eyeOffset, enemy.position.y - 2, eyeSize, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.restore();
 
       if (enemy.isBoss) {
+        ctx.save();
         ctx.fillStyle = "#e042ff";
         ctx.font = "bold 12px Georgia";
         ctx.textAlign = "center";
-        ctx.fillText("BOSS", enemy.position.x, enemy.position.y - enemy.radius - 20);
-        this.drawHpBar(enemy.position, enemy.radius, enemy.hp / enemy.maxHp);
+        ctx.fillText("BOSS", enemy.position.x, enemy.position.y - BOSS_LABEL_OFFSET);
+        ctx.restore();
+        this.drawHpBar(enemy.position, enemy.radius * 2.2, ENEMY_HP_BAR_OFFSET.boss, enemy.hp / enemy.maxHp);
       } else if (enemy.hp < enemy.maxHp) {
-        this.drawHpBar(enemy.position, enemy.radius, enemy.hp / enemy.maxHp);
+        this.drawHpBar(enemy.position, enemy.radius * 2.2, ENEMY_HP_BAR_OFFSET[enemy.type], enemy.hp / enemy.maxHp);
       }
-      ctx.restore();
     }
   }
 
@@ -377,10 +360,9 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawHpBar(position: Vec2, radius: number, ratio: number): void {
+  private drawHpBar(position: Vec2, width: number, aboveOffset: number, ratio: number): void {
     const ctx = this.ctx;
-    const width = radius * 2.2;
-    const y = position.y - radius - 8;
+    const y = position.y - aboveOffset;
     ctx.fillStyle = "#2a0d0d";
     ctx.fillRect(position.x - width / 2, y, width, 3);
     ctx.fillStyle = "#c81e1e";
@@ -480,27 +462,11 @@ export class Renderer {
     const ctx = this.ctx;
     const glow = 0.6 + Math.sin(nowMs / 260) * 0.15;
     for (const chest of chests) {
-      const { x, y } = chest.position;
-      const w = chest.radius * 2;
-      const h = chest.radius * 1.4;
       ctx.save();
+      ctx.translate(chest.position.x, chest.position.y);
       ctx.shadowColor = `rgba(255, 200, 60, ${glow})`;
       ctx.shadowBlur = 12;
-      // Base.
-      ctx.fillStyle = "#4a2f14";
-      ctx.fillRect(x - w / 2, y - h / 2, w, h);
-      ctx.strokeStyle = "#c8901e";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-      // Domed lid.
-      ctx.fillStyle = "#5c3a18";
-      ctx.beginPath();
-      ctx.ellipse(x, y - h / 2, w / 2, h / 2.4, 0, Math.PI, 0);
-      ctx.fill();
-      ctx.stroke();
-      // Latch.
-      ctx.fillStyle = "#ffcf4a";
-      ctx.fillRect(x - 2, y - 3, 4, 8);
+      drawEntityIcon(ctx, getChestImage(), CHEST_ICON_SIZE);
       ctx.restore();
     }
   }

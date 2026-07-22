@@ -270,6 +270,64 @@
   box-shadow: 0 0 18px rgba(200, 30, 30, 0.5);
 }
 
+/* Main menu only — a bare, glowing engraved-serif nav rather than boxed
+   buttons: the title screen is the one place in the game with room to be
+   atmospheric instead of purely functional. */
+.mm-title {
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-weight: 700;
+}
+
+.mm-subtitle {
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-weight: 500;
+}
+
+.mm-nav-button {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  cursor: pointer;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: 6px;
+  color: rgba(216, 207, 194, 0.72);
+  position: relative;
+  transition:
+    color 0.25s ease,
+    letter-spacing 0.25s ease,
+    transform 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.mm-nav-button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 0%;
+  height: 1px;
+  background: #c81e1e;
+  box-shadow: 0 0 8px rgba(200, 30, 30, 0.85);
+  transform: translateX(-50%);
+  transition: width 0.3s ease;
+}
+
+.mm-nav-button:hover,
+.mm-nav-button:focus-visible {
+  color: #e04a4a;
+  letter-spacing: 9px;
+  text-shadow: 0 0 16px rgba(200, 30, 30, 0.75);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.mm-nav-button:hover::after,
+.mm-nav-button:focus-visible::after {
+  width: 100%;
+}
+
 .perk-cards {
   display: flex;
   gap: 20px;

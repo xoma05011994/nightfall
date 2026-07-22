@@ -22,18 +22,18 @@ export class MainMenu {
     this.root = document.createElement("div");
     this.root.className = "overlay-screen";
     this.root.innerHTML = `
-      <h1 class="overlay-title">NIGHTFALL</h1>
-      <p class="overlay-subtitle">
+      <h1 class="overlay-title mm-title">NIGHTFALL</h1>
+      <p class="overlay-subtitle mm-subtitle">
         Something is coming for you in the dark. WASD to move, mouse to aim
         and fire. Survive.
       </p>
       <div class="menu-buttons">
-        <button class="overlay-button" data-action="endless">ENDLESS</button>
-        <button class="overlay-button" data-action="adventure">ADVENTURE</button>
-        <button class="overlay-button" data-action="multiplayer">MULTIPLAYER</button>
-        <button class="overlay-button" data-action="shop">ARMORY</button>
-        <button class="overlay-button" data-action="sandbox" style="display:none">SANDBOX</button>
-        <button class="overlay-button" data-action="perkTree" style="display:none">PERK TREE</button>
+        <button class="mm-nav-button" data-action="endless">ENDLESS</button>
+        <button class="mm-nav-button" data-action="adventure">ADVENTURE</button>
+        <button class="mm-nav-button" data-action="multiplayer">MULTIPLAYER</button>
+        <button class="mm-nav-button" data-action="shop">ARMORY</button>
+        <button class="mm-nav-button" data-action="sandbox" style="display:none">SANDBOX</button>
+        <button class="mm-nav-button" data-action="perkTree" style="display:none">PERK TREE</button>
       </div>
     `;
     container.appendChild(this.root);
