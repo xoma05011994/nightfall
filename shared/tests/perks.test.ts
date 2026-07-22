@@ -68,19 +68,30 @@ describe("PERKS", () => {
     expect(player.igniteDurationMs).toBe(3000);
   });
 
-  it("lightning perk sets chain damage and radius", () => {
+  it("lightning perk sets chain damage/radius and chain count on first pick", () => {
     const player = makePlayer();
     getPerkById("lightning")!.apply(player, 1);
     expect(player.lightningChainDamage).toBe(10);
     expect(player.lightningChainRadius).toBe(180);
+    expect(player.lightningChainCount).toBe(1);
   });
 
-  it("aura perk sets damage and radius, using the larger radius on repeat picks", () => {
+  it("lightning perk grows radius and chain count (more enemies arced to) on repeat picks", () => {
+    const player = makePlayer();
+    getPerkById("lightning")!.apply(player, 1);
+    getPerkById("lightning")!.apply(player, 2);
+    getPerkById("lightning")!.apply(player, 3);
+    expect(player.lightningChainDamage).toBe(30);
+    expect(player.lightningChainRadius).toBe(260); // 180 + 2*40
+    expect(player.lightningChainCount).toBe(3);
+  });
+
+  it("aura perk sets damage and radius, growing radius on repeat picks", () => {
     const player = makePlayer();
     getPerkById("aura")!.apply(player, 1);
     getPerkById("aura")!.apply(player, 2);
     expect(player.auraDamagePerTick).toBe(12);
-    expect(player.auraRadius).toBe(110);
+    expect(player.auraRadius).toBe(125); // 110 + 1*15
   });
 
   it("vampiric perk adds life steal, stacking additively", () => {

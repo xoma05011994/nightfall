@@ -83,6 +83,29 @@ describe("applyOnHitEffects", () => {
     expect(effects).toHaveLength(1);
     expect(effects[0]!.expiresAtMs).toBeGreaterThan(500);
   });
+
+  it("with a higher lightningChainCount, jumps to that many enemies in sequence without re-hitting any", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const first = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const second = makeEnemy({ id: 3, position: { x: 90, y: 0 }, hp: 100 }); // nearest to `first`, not to `hit`
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 200, lightningChainCount: 2 });
+    const effects: import("../src/types").LightningEffect[] = [];
+    applyOnHitEffects(player, [hit, first, second], hit, effects, 0);
+    expect(first.hp).toBe(80);
+    expect(second.hp).toBe(80);
+    expect(hit.hp).toBe(100); // never chains back onto the original hit
+    expect(effects).toHaveLength(2);
+  });
+
+  it("stops early if a chain runs out of un-hit enemies before reaching its full count", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const only = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 200, lightningChainCount: 5 });
+    const effects: import("../src/types").LightningEffect[] = [];
+    applyOnHitEffects(player, [hit, only], hit, effects, 0);
+    expect(only.hp).toBe(80);
+    expect(effects).toHaveLength(1); // nowhere left to jump to after the one other enemy
+  });
 });
 
 describe("stepBurningEnemies", () => {

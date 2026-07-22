@@ -6,11 +6,15 @@ import { collectDeadEnemies } from "./enemies";
 
 const LIGHTNING_EFFECT_LIFETIME_MS = 200;
 
-function findNearestOtherEnemy(source: Enemy, enemies: Enemy[], maxRange: number): Enemy | null {
+// `excludeIds` skips enemies already hit earlier in the same chain, so a
+// multi-jump Chain Lightning arc doesn't just bounce back and forth between
+// the same two enemies.
+function findNearestOtherEnemy(source: Enemy, enemies: Enemy[], maxRange: number, excludeIds?: Set<number>): Enemy | null {
   let nearest: Enemy | null = null;
   let nearestDistSq = maxRange * maxRange;
   for (const enemy of enemies) {
     if (enemy === source || enemy.hp <= 0) continue;
+    if (excludeIds?.has(enemy.id)) continue;
     const dSq = distanceSq(source.position, enemy.position);
     if (dSq <= nearestDistSq) {
       nearest = enemy;
@@ -39,15 +43,25 @@ export function applyOnHitEffects(player: Player, enemies: Enemy[], hitEnemy: En
     hitEnemy.burnTickTimerMs = IGNITE_TICK_MS;
   }
   if (player.lightningChainDamage > 0) {
-    const target = findNearestOtherEnemy(hitEnemy, enemies, player.lightningChainRadius);
-    if (target) {
+    // Chain Lightning's rank grows how many enemies in a row the arc jumps
+    // to (1 = just the original hit's nearest target, the pre-v0.84
+    // behavior) — each hop excludes everyone already hit in this chain so
+    // it can't just bounce back and forth between two enemies.
+    const hops = Math.max(1, player.lightningChainCount);
+    const visited = new Set<number>([hitEnemy.id]);
+    let source = hitEnemy;
+    for (let i = 0; i < hops; i++) {
+      const target = findNearestOtherEnemy(source, enemies, player.lightningChainRadius, visited);
+      if (!target) break;
       // Passive synergy: Ignite + Chain Lightning together — arcing into an
       // already-burning enemy deals double chain damage. Free once you have
       // both perks, no separate pick required.
       const damage = target.burnDamagePerTick > 0 ? player.lightningChainDamage * 2 : player.lightningChainDamage;
       target.hp -= damage;
       applyLifeSteal(player, damage);
-      lightningEffects.push({ from: { ...hitEnemy.position }, to: { ...target.position }, expiresAtMs: nowMs + LIGHTNING_EFFECT_LIFETIME_MS, seed: hitEnemy.id + target.id });
+      lightningEffects.push({ from: { ...source.position }, to: { ...target.position }, expiresAtMs: nowMs + LIGHTNING_EFFECT_LIFETIME_MS, seed: source.id + target.id });
+      visited.add(target.id);
+      source = target;
     }
   }
 }

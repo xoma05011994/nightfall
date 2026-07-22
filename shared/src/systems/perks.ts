@@ -100,21 +100,22 @@ export const PERKS: Perk[] = [
   {
     id: "lightning",
     name: "Chain Lightning",
-    description: "Hits arc to the nearest other enemy for bonus damage",
+    description: "Hits arc to more enemies, each rank adding another jump",
     icon: '<polygon points="13,2 4,14 11,14 9,22 20,10 13,10" fill="currentColor"/>',
-    apply: (p) => {
+    apply: (p, rank) => {
       p.lightningChainDamage += 10;
-      p.lightningChainRadius = 180;
+      p.lightningChainRadius = 180 + (rank - 1) * 40;
+      p.lightningChainCount = rank;
     },
   },
   {
     id: "aura",
     name: "Deadly Aura",
-    description: "Continuously damages enemies close to you",
+    description: "Continuously damages enemies close to you, growing with rank",
     icon: '<circle cx="12" cy="12" r="2.5" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>',
-    apply: (p) => {
+    apply: (p, rank) => {
       p.auraDamagePerTick += 6;
-      p.auraRadius = Math.max(p.auraRadius, 110);
+      p.auraRadius = 110 + (rank - 1) * 15;
     },
   },
   {
