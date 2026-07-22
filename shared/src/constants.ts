@@ -3,7 +3,12 @@
 
 export const PLAYER_BASE_HP = 100;
 export const PLAYER_BASE_MOVE_SPEED = 220; // px/sec
-export const PLAYER_RADIUS = 14;
+// v0.83 — collision radii were still sized for the original hand-drawn
+// vector shapes; the v0.7 raster sprites read considerably bigger on
+// screen than those, so hitboxes/pickup ranges were noticeably smaller
+// than what they visually looked like. Bumped up across the board (below)
+// to roughly track the new art's footprint instead of the old shapes'.
+export const PLAYER_RADIUS = 20;
 export const PLAYER_BASE_PICKUP_RADIUS = 90; // XP orb magnet radius only — weapon pickups require walking onto them
 
 export const PROJECTILE_RADIUS = 5;
@@ -12,7 +17,7 @@ export const PROJECTILE_TTL_MS = 1500;
 export const ENEMY_BASE_HP = 20;
 export const ENEMY_BASE_SPEED = 90; // px/sec, slower than the player so kiting works
 export const ENEMY_BASE_DAMAGE = 8;
-export const ENEMY_RADIUS = 14;
+export const ENEMY_RADIUS = 18;
 export const ENEMY_CONTACT_COOLDOWN_MS = 700;
 // Enemy hp/damage scale gently with elapsed run time so late runs stay
 // dangerous without needing a discrete wave-index system for v0.1/v0.2.
@@ -39,7 +44,7 @@ export const FENCE_POST_SPACING = 70;
 // v0.5 — halved: weapon leveling (picking up a duplicate) makes drops more
 // valuable per-drop, so they need to be rarer to stay a special event.
 export const WEAPON_DROP_CHANCE = 0.03;
-export const WEAPON_PICKUP_RADIUS = 16;
+export const WEAPON_PICKUP_RADIUS = 20;
 
 // v0.3 — ignite (burn DoT) and deadly aura perks tick on a fixed interval
 // rather than every frame, so their damage rate is easy to reason about
@@ -74,7 +79,7 @@ export const ROOM_EMPTY_GRACE_MS = 30_000;
 // a different, explore-for-it rhythm; spawn on the same off-screen ring as
 // enemies so reaching one takes a deliberate detour.
 export const CHEST_SPAWN_INTERVAL_MS = 45_000;
-export const CHEST_RADIUS = 18;
+export const CHEST_RADIUS = 26;
 export const CHEST_GOLD_MIN = 20;
 export const CHEST_GOLD_MAX = 40;
 export const CHEST_XP_AMOUNT = 40;
@@ -85,7 +90,7 @@ export const CHEST_XP_AMOUNT = 40;
 // threat is attrition/damage, not being run down.
 export const BOSS_BASE_HP = 600;
 export const BOSS_BASE_DAMAGE = 20;
-export const BOSS_RADIUS = 34;
+export const BOSS_RADIUS = 46;
 export const BOSS_SPEED = 70;
 export const BOSS_CONTACT_COOLDOWN_MS = 900;
 
