@@ -28,6 +28,7 @@ import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel, type XpProgress } from "@nightfall/shared/systems/xp";
 import { rollPerkOffers } from "@nightfall/shared/systems/perks";
 import { clampToWorldBounds } from "@nightfall/shared/systems/world";
+import { generateObstacles, resolvePlayerObstacleCollision } from "@nightfall/shared/systems/obstacles";
 import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
 import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
 import { createPlayer } from "@nightfall/shared/systems/player";
@@ -37,6 +38,7 @@ import type {
   ConeEffect,
   Enemy,
   LightningEffect,
+  Obstacle,
   Perk,
   Player,
   Projectile,
@@ -132,12 +134,18 @@ export class Room {
   private nextPickupId = 1;
   private nextChestId = 1;
 
+  // Generated once when the room is created (seeded from the same rng as
+  // everything else) and never regenerated — every player in the room sees
+  // the same terrain for the whole run.
+  private readonly obstacles: Obstacle[];
+
   private readonly tickHandle: ReturnType<typeof setInterval>;
 
   constructor(
     readonly roomCode: string,
     private readonly onEmpty: () => void,
   ) {
+    this.obstacles = generateObstacles(this.rng);
     this.tickHandle = setInterval(() => this.step(), MATCH_TICK_MS);
   }
 
@@ -380,6 +388,7 @@ export class Room {
         if (Math.hypot(input.aimX, input.aimY) > 1e-6) p.facingAngle = Math.atan2(input.aimY, input.aimX);
       }
       p.position = clampToWorldBounds(p.position, p.radius);
+      p.position = resolvePlayerObstacleCollision(p.position, p.radius, this.obstacles);
       for (const slot of p.weaponSlots) if (slot) stepWeaponInstance(slot, WEAPON_DEFS[slot.weaponId], dt);
       if (p.momentumStacks > 0) {
         p.momentumTimerMs -= dt * 1000;
@@ -561,6 +570,7 @@ export class Room {
       phase: this.phase,
       hostId: this.hostId(),
       players: connected.map(([id, rec]) => ({ id, displayName: rec.displayName, player: rec.player })),
+      obstacles: this.obstacles,
       enemies: this.enemies,
       projectiles: this.projectiles,
       enemyProjectiles: this.enemyProjectiles,

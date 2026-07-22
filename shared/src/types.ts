@@ -187,6 +187,19 @@ export interface Chest {
   radius: number;
 }
 
+export type ObstacleKind = "tree" | "lake" | "hole";
+
+// Static, run-length terrain features that block the PLAYER only (see
+// systems/obstacles.ts) — enemies path straight through them. Generated
+// once per run/room and never change afterward, so they're plain data with
+// no step/tick function of their own.
+export interface Obstacle {
+  id: number;
+  kind: ObstacleKind;
+  position: Vec2;
+  radius: number;
+}
+
 export type ChestRewardType = "gold" | "xp" | "perk" | "magnet";
 
 // Transient render-only effects for instant-hit fire modes (beam/cone), which

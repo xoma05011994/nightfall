@@ -1,4 +1,4 @@
-import type { BeamEffect, Chest, ConeEffect, Enemy, LightningEffect, Player, Projectile, RewardPopupEffect, WeaponPickup, XpOrb } from "./types";
+import type { BeamEffect, Chest, ConeEffect, Enemy, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, WeaponPickup, XpOrb } from "./types";
 
 // Sent from client to server at INPUT_SEND_HZ.
 export interface PlayerInputDTO {
@@ -36,6 +36,11 @@ export interface MatchSnapshot {
   // "startGame" is honored.
   hostId: string;
   players: PlayerSnapshot[];
+  // Static, generated once when the room is created and never changes
+  // afterward — still sent every tick like everything else here rather than
+  // special-cased into a one-time message, for the same "simple over
+  // optimal at this scale" reasoning as the rest of this broadcast.
+  obstacles: Obstacle[];
   enemies: Enemy[];
   projectiles: Projectile[];
   enemyProjectiles: Projectile[];

@@ -19,6 +19,7 @@ import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs } from "@nightfall/shared/systems/xp";
 import { rollPerkOffers } from "@nightfall/shared/systems/perks";
 import { clampToWorldBounds } from "@nightfall/shared/systems/world";
+import { generateObstacles, resolvePlayerObstacleCollision } from "@nightfall/shared/systems/obstacles";
 import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
 import { WEAPON_DEFS, createWeaponInstance, fireWeapon, startReload, stepWeaponInstance } from "@nightfall/shared/systems/weapons";
 import { createPlayer } from "@nightfall/shared/systems/player";
@@ -32,6 +33,7 @@ import type {
   GamePhase,
   LevelDef,
   LightningEffect,
+  Obstacle,
   Perk,
   Player,
   Projectile,
@@ -61,6 +63,7 @@ export class Game {
   xpOrbs: XpOrb[] = [];
   weaponPickups: WeaponPickup[] = [];
   chests: Chest[] = [];
+  obstacles: Obstacle[] = [];
   beamEffects: BeamEffect[] = [];
   coneEffects: ConeEffect[] = [];
   lightningEffects: LightningEffect[] = [];
@@ -115,6 +118,7 @@ export class Game {
     this.xpOrbs = [];
     this.weaponPickups = [];
     this.chests = [];
+    this.obstacles = generateObstacles(this.rng);
     this.beamEffects = [];
     this.coneEffects = [];
     this.lightningEffects = [];
@@ -144,6 +148,7 @@ export class Game {
     this.player.position.x += moveVector.x * this.player.moveSpeed * dt;
     this.player.position.y += moveVector.y * this.player.moveSpeed * dt;
     this.player.position = clampToWorldBounds(this.player.position, this.player.radius);
+    this.player.position = resolvePlayerObstacleCollision(this.player.position, this.player.radius, this.obstacles);
 
     for (const slot of this.player.weaponSlots) {
       if (!slot) continue;

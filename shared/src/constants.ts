@@ -159,6 +159,20 @@ export const SHOOTER_PROJECTILE_TTL_MS = 3500;
 export const SHOOTER_FIRE_COOLDOWN_MS = 2200;
 export const SHOOTER_PROJECTILE_COLOR = "#b23fff";
 
+// v0.86 — static terrain obstacles (trees/lakes/holes) that block the
+// player's movement only, scattered once per run/room. Kept off the
+// immediate spawn area and spaced apart from each other so they read as
+// deliberate terrain rather than a wall of clutter.
+export const OBSTACLE_COUNT = 22;
+export const OBSTACLE_MIN_DIST_FROM_ORIGIN = 260;
+export const OBSTACLE_MIN_SPACING = 90;
+export const OBSTACLE_TREE_RADIUS_MIN = 22;
+export const OBSTACLE_TREE_RADIUS_MAX = 32;
+export const OBSTACLE_LAKE_RADIUS_MIN = 60;
+export const OBSTACLE_LAKE_RADIUS_MAX = 100;
+export const OBSTACLE_HOLE_RADIUS_MIN = 40;
+export const OBSTACLE_HOLE_RADIUS_MAX = 65;
+
 // v0.6 — co-op multiplayer (Endless-only). Room codes exclude visually
 // ambiguous characters (0/O, 1/I/L) since they're meant to be read aloud or
 // typed by hand, and also exclude W/A/S/D so a code can be typed into the

@@ -4,7 +4,7 @@ import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, player
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import { shurikenAngle } from "@nightfall/shared/systems/statusEffects";
 import { SHURIKEN_ORBIT_RADIUS } from "@nightfall/shared/constants";
-import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
+import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
 
 // A co-op teammate to render, with the color assigned by their index in the
@@ -24,6 +24,7 @@ interface Splatter {
 
 export interface RenderState {
   player: Player;
+  obstacles: Obstacle[];
   enemies: Enemy[];
   projectiles: Projectile[];
   enemyProjectiles: Projectile[];
@@ -153,6 +154,7 @@ export class Renderer {
 
     this.drawSplatters(camera, w, h);
     this.drawFence(camera, w, h);
+    this.drawObstacles(state.obstacles, camera, w, h);
     this.drawConeEffects(state.coneEffects, nowMs);
     this.drawChests(state.chests, nowMs);
     this.drawWeaponPickups(state.weaponPickups, nowMs);
@@ -191,6 +193,7 @@ export class Renderer {
         player: local.player,
         playerColor: playerColorForIndex(localIndex),
         playerAimAngle: localAimAngle,
+        obstacles: snapshot.obstacles,
         enemies: snapshot.enemies,
         projectiles: snapshot.projectiles,
         enemyProjectiles: snapshot.enemyProjectiles,
@@ -354,6 +357,81 @@ export class Renderer {
     for (let y = -half + FENCE_POST_SPACING; y < half; y += FENCE_POST_SPACING) {
       drawPost(-half, y);
       drawPost(half, y);
+    }
+  }
+
+  // Static terrain — blocks the player only (see systems/obstacles.ts),
+  // enemies path straight through. Each kind gets a distinct hand-drawn
+  // vector look rather than raster art, matching the fence/splatters'
+  // existing treatment of ground-layer decoration.
+  private drawObstacles(obstacles: Obstacle[], camera: Vec2, w: number, h: number): void {
+    const ctx = this.ctx;
+    for (const o of obstacles) {
+      if (!this.inView(o.position.x, o.position.y, camera, w, h, o.radius + 40)) continue;
+      ctx.save();
+      ctx.translate(o.position.x, o.position.y);
+      if (o.kind === "tree") {
+        // Trunk.
+        ctx.fillStyle = "#3a2416";
+        ctx.fillRect(-o.radius * 0.12, o.radius * 0.1, o.radius * 0.24, o.radius * 0.7);
+        // Canopy — three overlapping dark circles read as foliage.
+        ctx.fillStyle = "#1c3a1c";
+        ctx.strokeStyle = "#0d1f0d";
+        ctx.lineWidth = 2;
+        for (const [dx, dy, r] of [
+          [0, -o.radius * 0.3, o.radius * 0.75],
+          [-o.radius * 0.45, 0, o.radius * 0.55],
+          [o.radius * 0.45, 0, o.radius * 0.55],
+        ] as const) {
+          ctx.beginPath();
+          ctx.arc(dx, dy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      } else if (o.kind === "lake") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+        ctx.beginPath();
+        ctx.ellipse(3, 5, o.radius, o.radius * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        const gradient = ctx.createRadialGradient(-o.radius * 0.3, -o.radius * 0.3, 0, 0, 0, o.radius);
+        gradient.addColorStop(0, "#2a5a72");
+        gradient.addColorStop(0.6, "#123048");
+        gradient.addColorStop(1, "#0a1c2c");
+        ctx.fillStyle = gradient;
+        ctx.strokeStyle = "#4a7a94";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, o.radius, o.radius * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Hole — a jagged dark void with a broken dirt rim.
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.ellipse(3, 5, o.radius, o.radius * 0.85, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#2a1810";
+        ctx.beginPath();
+        const spikes = 10;
+        for (let i = 0; i < spikes; i++) {
+          const angle = (i / spikes) * Math.PI * 2;
+          const jitter = i % 2 === 0 ? 1 : 0.82;
+          const x = Math.cos(angle) * o.radius * jitter;
+          const y = Math.sin(angle) * o.radius * 0.85 * jitter;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, o.radius * 0.75);
+        gradient.addColorStop(0, "#000000");
+        gradient.addColorStop(1, "#1c0f08");
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, o.radius * 0.7, o.radius * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
   }
 

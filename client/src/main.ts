@@ -318,6 +318,7 @@ function buildRenderState(aimAngle: number = Math.PI / 2) {
   return {
     player: game.player,
     playerAimAngle: aimAngle,
+    obstacles: game.obstacles,
     enemies: game.enemies,
     projectiles: game.projectiles,
     xpOrbs: game.xpOrbs,
