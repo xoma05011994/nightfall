@@ -39,6 +39,10 @@ export function createPlayer(): Player {
     auraTriggersLightning: false,
     goldMultiplier: 1,
     chainLinkDamagePerTick: 0,
+    shurikenCount: 0,
+    shurikenDamagePerTick: 0,
+    shurikenTickTimerMs: 0,
+    lightningChainCount: 0,
     isGhost: false,
     facingAngle: Math.PI / 2,
   };

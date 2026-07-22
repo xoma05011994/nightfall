@@ -83,6 +83,18 @@ export interface Player {
   // — contributes to the party's shared inter-player laser damage; see
   // systems/chainLink.ts. Always 0 in solo.
   chainLinkDamagePerTick: number;
+  // Shurikens perk — blades orbiting the player at a fixed radius/speed
+  // (see constants.ts's SHURIKEN_* and systems/statusEffects.ts's
+  // stepShurikens), damaging any enemy they sweep through. Positions are
+  // derived purely from elapsed time + count, so nothing about them needs
+  // to be stored beyond count/damage/the tick timer.
+  shurikenCount: number;
+  shurikenDamagePerTick: number;
+  shurikenTickTimerMs: number;
+  // How many additional enemies a Chain Lightning arc jumps to beyond the
+  // first (1 = just the initial hit's nearest target, matching the
+  // original single-jump behavior) — grows with Chain Lightning's rank.
+  lightningChainCount: number;
   // Multiplayer only — set when hp hits 0 in co-op. A ghost can still float
   // around to spectate but is excluded from all combat (can't fire, isn't
   // targeted, takes no damage, collects nothing) until a teammate picks the
@@ -230,7 +242,14 @@ export interface Perk {
   // one to bring back. The revive itself is applied server-side (see
   // room.ts's chooseUpgrade handling), not in `apply`.
   requiresDeadTeammate?: boolean;
-  apply: (player: Player) => void;
+  // `rank` is this pick's resulting count (1 for the first pick, 2 for the
+  // second, ...) — most perks ignore it and just re-apply the same flat
+  // bonus every pick (already-correct compounding, e.g. damageMultiplier
+  // *= 1.25 each time), but perks whose *shape* should grow with rank
+  // rather than just their flat numbers (Deadly Aura's radius, Chain
+  // Lightning's jump count, Shurikens' blade count) read it to compute
+  // rank-dependent values instead of a flat per-pick increment.
+  apply: (player: Player, rank: number) => void;
 }
 
 export interface WeaponPromptInfo {

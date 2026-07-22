@@ -22,7 +22,7 @@ import {
   stepProjectiles,
 } from "@nightfall/shared/systems/combat";
 import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
-import { stepAura, stepBurningEnemies } from "@nightfall/shared/systems/statusEffects";
+import { stepAura, stepBurningEnemies, stepShurikens } from "@nightfall/shared/systems/statusEffects";
 import { stepChainLink } from "@nightfall/shared/systems/chainLink";
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel, type XpProgress } from "@nightfall/shared/systems/xp";
@@ -206,7 +206,9 @@ export class Room {
       if (!offers) return;
       const perk = offers.find((o) => o.id === msg.payload.perkId);
       if (!perk) return;
-      perk.apply(rec.player);
+      const existing = rec.pickedPerks.find((p) => p.perk.id === perk.id);
+      const rank = existing ? existing.count + 1 : 1;
+      perk.apply(rec.player, rank);
       // Revive is special: it brings every downed teammate back at half hp,
       // respawned on top of the reviver (apply() itself is a no-op).
       if (perk.id === "revive") {
@@ -217,7 +219,6 @@ export class Room {
           other.player.position = { ...rec.player.position };
         }
       }
-      const existing = rec.pickedPerks.find((p) => p.perk.id === perk.id);
       if (existing) existing.count += 1;
       else rec.pickedPerks.push({ perk, count: 1 });
       rec.pendingOffers = null;
@@ -487,6 +488,7 @@ export class Room {
     for (const [, rec] of living) {
       this.handleDeadEnemies(stepBurningEnemies(rec.player, this.enemies, dt), rec);
       this.handleDeadEnemies(stepAura(rec.player, this.enemies, dt, this.lightningEffects, nowMs), rec);
+      this.handleDeadEnemies(stepShurikens(rec.player, this.enemies, dt, nowMs), rec);
     }
 
     // 5b. Chain Link (multiplayer-only) — party-wide, not per-player: one

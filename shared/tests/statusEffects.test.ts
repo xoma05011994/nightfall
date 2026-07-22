@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IGNITE_TICK_MS } from "../src/constants";
-import { applyLifeSteal, applyOnHitEffects, stepAura, stepBurningEnemies } from "../src/systems/statusEffects";
+import { applyLifeSteal, applyOnHitEffects, shurikenAngle, stepAura, stepBurningEnemies, stepShurikens } from "../src/systems/statusEffects";
+import { SHURIKEN_ORBIT_RADIUS, SHURIKEN_TICK_MS } from "../src/constants";
 import { makeEnemy, makePlayer } from "./testHelpers";
 
 describe("applyLifeSteal", () => {
@@ -198,5 +199,48 @@ describe("stepAura", () => {
     const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraTriggersLightning: true });
     stepAura(player, [inAura, justOutside], 0.1, [], 0);
     expect(justOutside.hp).toBe(100);
+  });
+});
+
+describe("shurikenAngle", () => {
+  it("spaces blades evenly around the circle at a given instant", () => {
+    const now = 1000;
+    const a0 = shurikenAngle(0, 4, now);
+    const a1 = shurikenAngle(1, 4, now);
+    // Adjacent blades are always exactly a quarter-turn apart, regardless
+    // of the shared orbit-speed term (which cancels out in the difference).
+    expect(a1 - a0).toBeCloseTo(Math.PI / 2, 10);
+  });
+});
+
+describe("stepShurikens", () => {
+  it("does nothing when the player has no shurikens", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, shurikenCount: 0 });
+    stepShurikens(player, [enemy], 1, 0);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("damages an enemy sitting on the orbit ring once the tick timer elapses", () => {
+    // At nowMs=0 with count=1, shurikenAngle(0,1,0) = 0, so the blade sits
+    // at (SHURIKEN_ORBIT_RADIUS, 0) relative to the player.
+    const player = makePlayer({ position: { x: 0, y: 0 }, shurikenCount: 1, shurikenDamagePerTick: 7, shurikenTickTimerMs: 0 });
+    const enemy = makeEnemy({ position: { x: SHURIKEN_ORBIT_RADIUS, y: 0 }, hp: 100 });
+    stepShurikens(player, [enemy], 0.001, 0);
+    expect(enemy.hp).toBe(93);
+  });
+
+  it("does not hit an enemy far from every blade's current position", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, shurikenCount: 1, shurikenDamagePerTick: 7, shurikenTickTimerMs: 0 });
+    const enemy = makeEnemy({ position: { x: -SHURIKEN_ORBIT_RADIUS, y: 0 }, hp: 100 }); // opposite side
+    stepShurikens(player, [enemy], 0.001, 0);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("respects its own tick timer independent of dt", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, shurikenCount: 1, shurikenDamagePerTick: 7, shurikenTickTimerMs: SHURIKEN_TICK_MS });
+    const enemy = makeEnemy({ position: { x: SHURIKEN_ORBIT_RADIUS, y: 0 }, hp: 100 });
+    stepShurikens(player, [enemy], 0.001, 0); // timer still well above 0 after this small dt
+    expect(enemy.hp).toBe(100);
   });
 });

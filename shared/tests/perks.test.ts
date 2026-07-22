@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 18 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(18);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(18);
+  it("has exactly 19 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(19);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(19);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -17,122 +17,122 @@ describe("PERKS", () => {
 
   it("damage perk multiplies damageMultiplier by 1.25", () => {
     const player = makePlayer();
-    getPerkById("damage")!.apply(player);
+    getPerkById("damage")!.apply(player, 1);
     expect(player.damageMultiplier).toBeCloseTo(1.25, 5);
   });
 
   it("firerate perk multiplies attackCooldownMultiplier by 0.8", () => {
     const player = makePlayer();
-    getPerkById("firerate")!.apply(player);
+    getPerkById("firerate")!.apply(player, 1);
     expect(player.attackCooldownMultiplier).toBeCloseTo(0.8, 5);
   });
 
   it("maxhp perk increases both max hp and current hp by 20", () => {
     const player = makePlayer();
     player.hp = 50;
-    getPerkById("maxhp")!.apply(player);
+    getPerkById("maxhp")!.apply(player, 1);
     expect(player.maxHp).toBe(120);
     expect(player.hp).toBe(70);
   });
 
   it("speed perk increases move speed by 15%", () => {
     const player = makePlayer();
-    getPerkById("speed")!.apply(player);
+    getPerkById("speed")!.apply(player, 1);
     expect(player.moveSpeed).toBeCloseTo(230, 5);
   });
 
   it("multishot perk adds one extra projectile", () => {
     const player = makePlayer();
-    getPerkById("multishot")!.apply(player);
+    getPerkById("multishot")!.apply(player, 1);
     expect(player.extraProjectiles).toBe(1);
   });
 
   it("pierce perk adds one pierce charge", () => {
     const player = makePlayer();
-    getPerkById("pierce")!.apply(player);
+    getPerkById("pierce")!.apply(player, 1);
     expect(player.pierce).toBe(1);
   });
 
   it("ignite perk sets burn damage and a fixed duration", () => {
     const player = makePlayer();
-    getPerkById("ignite")!.apply(player);
+    getPerkById("ignite")!.apply(player, 1);
     expect(player.igniteDamagePerTick).toBe(4);
     expect(player.igniteDurationMs).toBe(3000);
   });
 
   it("ignite perk increases damage further on repeat picks without extending duration", () => {
     const player = makePlayer();
-    getPerkById("ignite")!.apply(player);
-    getPerkById("ignite")!.apply(player);
+    getPerkById("ignite")!.apply(player, 1);
+    getPerkById("ignite")!.apply(player, 2);
     expect(player.igniteDamagePerTick).toBe(8);
     expect(player.igniteDurationMs).toBe(3000);
   });
 
   it("lightning perk sets chain damage and radius", () => {
     const player = makePlayer();
-    getPerkById("lightning")!.apply(player);
+    getPerkById("lightning")!.apply(player, 1);
     expect(player.lightningChainDamage).toBe(10);
     expect(player.lightningChainRadius).toBe(180);
   });
 
   it("aura perk sets damage and radius, using the larger radius on repeat picks", () => {
     const player = makePlayer();
-    getPerkById("aura")!.apply(player);
-    getPerkById("aura")!.apply(player);
+    getPerkById("aura")!.apply(player, 1);
+    getPerkById("aura")!.apply(player, 2);
     expect(player.auraDamagePerTick).toBe(12);
     expect(player.auraRadius).toBe(110);
   });
 
   it("vampiric perk adds life steal, stacking additively", () => {
     const player = makePlayer();
-    getPerkById("vampiric")!.apply(player);
-    getPerkById("vampiric")!.apply(player);
+    getPerkById("vampiric")!.apply(player, 1);
+    getPerkById("vampiric")!.apply(player, 2);
     expect(player.lifeStealPercent).toBeCloseTo(0.16, 5);
   });
 
   it("berserker perk adds to the low-hp damage bonus", () => {
     const player = makePlayer();
-    getPerkById("berserker")!.apply(player);
+    getPerkById("berserker")!.apply(player, 1);
     expect(player.berserkerIntensity).toBeCloseTo(0.25, 5);
   });
 
   it("momentum perk adds to the per-stack fire-rate bonus", () => {
     const player = makePlayer();
-    getPerkById("momentum")!.apply(player);
+    getPerkById("momentum")!.apply(player, 1);
     expect(player.momentumFireRatePerStack).toBeCloseTo(0.03, 5);
   });
 
   it("wildfire perk sets auraAppliesIgnite", () => {
     const player = makePlayer();
-    getPerkById("wildfire")!.apply(player);
+    getPerkById("wildfire")!.apply(player, 1);
     expect(player.auraAppliesIgnite).toBe(true);
   });
 
   it("overload perk sets auraTriggersLightning", () => {
     const player = makePlayer();
-    getPerkById("overload")!.apply(player);
+    getPerkById("overload")!.apply(player, 1);
     expect(player.auraTriggersLightning).toBe(true);
   });
 
   it("greed perk increases pickup radius and gold multiplier", () => {
     const player = makePlayer();
     const before = player.pickupRadius;
-    getPerkById("greed")!.apply(player);
+    getPerkById("greed")!.apply(player, 1);
     expect(player.pickupRadius).toBeCloseTo(before * 1.3, 5);
     expect(player.goldMultiplier).toBeCloseTo(1.2, 5);
   });
 
   it("perks stack multiplicatively when applied repeatedly", () => {
     const player = makePlayer();
-    getPerkById("damage")!.apply(player);
-    getPerkById("damage")!.apply(player);
+    getPerkById("damage")!.apply(player, 1);
+    getPerkById("damage")!.apply(player, 2);
     expect(player.damageMultiplier).toBeCloseTo(1.5625, 5);
   });
 
   it("storm conduit perk boosts chain lightning damage and radius further", () => {
     const player = makePlayer();
-    getPerkById("lightning")!.apply(player);
-    getPerkById("stormConduit")!.apply(player);
+    getPerkById("lightning")!.apply(player, 1);
+    getPerkById("stormConduit")!.apply(player, 1);
     expect(player.lightningChainDamage).toBe(24);
     expect(player.lightningChainRadius).toBe(240);
   });
@@ -145,9 +145,19 @@ describe("PERKS", () => {
 
   it("chainLink perk increases chainLinkDamagePerTick and requires a party of 2+", () => {
     const player = makePlayer();
-    getPerkById("chainLink")!.apply(player);
+    getPerkById("chainLink")!.apply(player, 1);
     expect(player.chainLinkDamagePerTick).toBe(8);
     expect(getPerkById("chainLink")!.minPartySize).toBe(2);
+  });
+
+  it("shurikens perk sets blade count from rank and adds damage per pick", () => {
+    const player = makePlayer();
+    getPerkById("shurikens")!.apply(player, 1);
+    expect(player.shurikenCount).toBe(2);
+    expect(player.shurikenDamagePerTick).toBe(5);
+    getPerkById("shurikens")!.apply(player, 2);
+    expect(player.shurikenCount).toBe(3);
+    expect(player.shurikenDamagePerTick).toBe(10);
   });
 
   it("revive perk is gated on a 2+ party AND a downed teammate, and buffs the picker's stats not at all", () => {
@@ -156,7 +166,7 @@ describe("PERKS", () => {
     expect(revive.requiresDeadTeammate).toBe(true);
     const before = makePlayer();
     const after = makePlayer();
-    revive.apply(after);
+    revive.apply(after, 1);
     expect(after).toEqual(before); // apply is a no-op — the revive happens server-side
   });
 });

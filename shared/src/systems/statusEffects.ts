@@ -1,6 +1,7 @@
-import { AURA_TICK_MS, IGNITE_TICK_MS } from "../constants";
+import { AURA_TICK_MS, IGNITE_TICK_MS, SHURIKEN_HIT_RADIUS, SHURIKEN_ORBIT_RADIUS, SHURIKEN_ORBIT_SPEED, SHURIKEN_TICK_MS } from "../constants";
 import { distanceSq } from "../math";
 import type { Enemy, LightningEffect, Player } from "../types";
+import { circlesOverlap } from "./collision";
 import { collectDeadEnemies } from "./enemies";
 
 const LIGHTNING_EFFECT_LIFETIME_MS = 200;
@@ -120,6 +121,43 @@ export function stepAura(player: Player, enemies: Enemy[], dt: number, lightning
       nearest.hp -= player.lightningChainDamage;
       applyLifeSteal(player, player.lightningChainDamage);
       lightningEffects.push({ from: { x: player.position.x, y: player.position.y }, to: { ...nearest.position }, expiresAtMs: nowMs + LIGHTNING_EFFECT_LIFETIME_MS, seed: nearest.id });
+    }
+  }
+
+  return collectDeadEnemies(enemies);
+}
+
+// The i-th of `count` shurikens' current orbit position angle — a pure
+// function of elapsed time, not any stored per-shuriken state, so the
+// server tick and the client's render loop compute identical positions
+// from the same (index, count, nowMs) without needing to sync anything.
+export function shurikenAngle(index: number, count: number, nowMs: number): number {
+  return (nowMs / 1000) * SHURIKEN_ORBIT_SPEED + (index / count) * Math.PI * 2;
+}
+
+// Shurikens perk — blades orbiting the player, damaging anything they sweep
+// through. Ticks on a fixed interval (same "sample, don't continuously
+// collide" pattern as Deadly Aura) rather than every frame, so an enemy
+// sitting in the orbit ring takes hits at a predictable rate instead of a
+// framerate-dependent one.
+export function stepShurikens(player: Player, enemies: Enemy[], dt: number, nowMs: number): Enemy[] {
+  if (player.shurikenCount <= 0) return [];
+  player.shurikenTickTimerMs -= dt * 1000;
+  if (player.shurikenTickTimerMs > 0) return [];
+  player.shurikenTickTimerMs += SHURIKEN_TICK_MS;
+
+  for (let i = 0; i < player.shurikenCount; i++) {
+    const angle = shurikenAngle(i, player.shurikenCount, nowMs);
+    const point = {
+      x: player.position.x + Math.cos(angle) * SHURIKEN_ORBIT_RADIUS,
+      y: player.position.y + Math.sin(angle) * SHURIKEN_ORBIT_RADIUS,
+    };
+    for (const enemy of enemies) {
+      if (enemy.hp <= 0) continue;
+      if (circlesOverlap(point, SHURIKEN_HIT_RADIUS, enemy.position, enemy.radius)) {
+        enemy.hp -= player.shurikenDamagePerTick;
+        applyLifeSteal(player, player.shurikenDamagePerTick);
+      }
     }
   }
 

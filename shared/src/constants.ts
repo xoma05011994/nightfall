@@ -47,6 +47,16 @@ export const WEAPON_PICKUP_RADIUS = 16;
 export const IGNITE_TICK_MS = 500;
 export const AURA_TICK_MS = 400;
 
+// v0.82 — Shurikens perk: blades orbit the player at a fixed radius/angular
+// speed (both flat, not rank-scaled — only count and damage grow with
+// rank) and deal damage on a fixed tick, same "sample on an interval"
+// pattern as Deadly Aura rather than continuous per-frame collision.
+export const SHURIKEN_TICK_MS = 200;
+export const SHURIKEN_ORBIT_RADIUS = 70;
+export const SHURIKEN_ORBIT_SPEED = 3; // radians/sec
+export const SHURIKEN_HIT_RADIUS = 14;
+export const SHURIKEN_BASE_DAMAGE = 5;
+
 // v0.6 M4 — Chain Link (multiplayer-only perk): a laser drawn between each
 // pair of adjacent connected players, damaging enemies caught within
 // CHAIN_LINK_HIT_WIDTH px of the segment. Same tick cadence as Deadly Aura.

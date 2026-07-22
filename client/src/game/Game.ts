@@ -13,7 +13,7 @@ import { mulberry32, normalize } from "@nightfall/shared/math";
 import { createBoss, createEnemy, currentSpawnIntervalMs, pickEnemyType, spawnPositionAround } from "@nightfall/shared/systems/spawner";
 import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "@nightfall/shared/systems/combat";
 import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
-import { stepAura, stepBurningEnemies } from "@nightfall/shared/systems/statusEffects";
+import { stepAura, stepBurningEnemies, stepShurikens } from "@nightfall/shared/systems/statusEffects";
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs } from "@nightfall/shared/systems/xp";
@@ -194,6 +194,8 @@ export class Game {
     this.handleDeadEnemies(stepBurningEnemies(this.player, this.enemies, dt));
     if (this.phase !== "playing") return;
     this.handleDeadEnemies(stepAura(this.player, this.enemies, dt, this.lightningEffects, nowMs));
+    if (this.phase !== "playing") return;
+    this.handleDeadEnemies(stepShurikens(this.player, this.enemies, dt, nowMs));
     if (this.phase !== "playing") return;
 
     const { survivingOrbs, xpCollected } = stepXpOrbs(this.xpOrbs, this.player, dt);
@@ -443,8 +445,9 @@ export class Game {
   }
 
   applyPerk(perk: Perk): void {
-    perk.apply(this.player);
     const existing = this.pickedPerks.find((p) => p.perk.id === perk.id);
+    const rank = existing ? existing.count + 1 : 1;
+    perk.apply(this.player, rank);
     if (existing) existing.count += 1;
     else this.pickedPerks.push({ perk, count: 1 });
     this.phase = "playing";

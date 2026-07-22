@@ -2,6 +2,8 @@ import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WOR
 import { drawWeaponIcon } from "./weaponIcons";
 import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, rotationForAngle, rotationToFace, type PlayerColor } from "./entityIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
+import { shurikenAngle } from "@nightfall/shared/systems/statusEffects";
+import { SHURIKEN_ORBIT_RADIUS } from "@nightfall/shared/constants";
 import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
 
@@ -162,6 +164,7 @@ export class Renderer {
     this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, state.playerColor ?? "blue", state.playerAimAngle ?? Math.PI / 2, nowMs);
+    if (!state.player.isGhost) this.drawShurikens(state.player, nowMs);
     if (state.otherPlayers) {
       for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
     }
@@ -215,6 +218,7 @@ export class Renderer {
       this.drawGhost(player, snapshot.color, rotation, nowMs);
     } else {
       this.drawCharacterSprite(player, snapshot.color, rotation, nowMs);
+      this.drawShurikens(player, nowMs);
     }
 
     ctx.save();
@@ -259,6 +263,44 @@ export class Renderer {
     ctx.shadowBlur = 16;
     drawEntityIcon(ctx, getCharacterImage(color), PLAYER_ICON_SIZE * pulse);
     ctx.restore();
+  }
+
+  // Shurikens perk — small spinning blades orbiting the player. Positions
+  // come from the exact same shurikenAngle() formula the sim uses (see
+  // statusEffects.ts), so what's drawn always matches where a hit can
+  // actually land — no separate client-side visual-only state to drift out
+  // of sync with the server/solo simulation.
+  private drawShurikens(player: Player, nowMs: number): void {
+    if (player.shurikenCount <= 0) return;
+    const ctx = this.ctx;
+    const spin = nowMs / 120; // each blade's own rotation, independent of orbit angle
+    for (let i = 0; i < player.shurikenCount; i++) {
+      const angle = shurikenAngle(i, player.shurikenCount, nowMs);
+      const x = player.position.x + Math.cos(angle) * SHURIKEN_ORBIT_RADIUS;
+      const y = player.position.y + Math.sin(angle) * SHURIKEN_ORBIT_RADIUS;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(spin);
+      ctx.shadowColor = "#c0c8d8";
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = "#8fa0b8";
+      ctx.strokeStyle = "#e8edf5";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let p = 0; p < 4; p++) {
+        const a = (p / 4) * Math.PI * 2;
+        const outer = { x: Math.cos(a) * 9, y: Math.sin(a) * 9 };
+        const innerA = a + Math.PI / 4;
+        const inner = { x: Math.cos(innerA) * 3, y: Math.sin(innerA) * 3 };
+        if (p === 0) ctx.moveTo(outer.x, outer.y);
+        else ctx.lineTo(outer.x, outer.y);
+        ctx.lineTo(inner.x, inner.y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   private inView(x: number, y: number, camera: Vec2, w: number, h: number, margin: number): boolean {

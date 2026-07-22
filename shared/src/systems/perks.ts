@@ -196,6 +196,16 @@ export const PERKS: Perk[] = [
     },
   },
   {
+    id: "shurikens",
+    name: "Shurikens",
+    description: "Blades orbit you, damaging enemies they sweep through",
+    icon: '<polygon points="12,2 15,9 22,12 15,15 12,22 9,15 2,12 9,9" fill="currentColor"/><circle cx="12" cy="12" r="2.5" fill="var(--panel, #120a0a)"/>',
+    apply: (p, rank) => {
+      p.shurikenCount = rank + 1;
+      p.shurikenDamagePerTick += 5;
+    },
+  },
+  {
     id: "revive",
     name: "Revive",
     description: "Bring all downed teammates back to life — multiplayer only, offered only while someone's down",
