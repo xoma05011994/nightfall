@@ -19,7 +19,7 @@ import { stepAura, stepBurningEnemies, stepShurikens } from "@nightfall/shared/s
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs } from "@nightfall/shared/systems/xp";
-import { rollPerkOffers } from "@nightfall/shared/systems/perks";
+import { getPerkById, rollPerkOffers } from "@nightfall/shared/systems/perks";
 import { clampToWorldBounds } from "@nightfall/shared/systems/world";
 import { generateObstacles, resolvePlayerObstacleCollision } from "@nightfall/shared/systems/obstacles";
 import { findTouchedPickup, rollWeaponDrop, spawnWeaponPickup } from "@nightfall/shared/systems/weaponDrops";
@@ -95,8 +95,8 @@ export class Game {
   // 6-minute mark. The run keeps going past that mark (timer, spawns, etc.
   // don't stop) until this specific enemy is killed.
   private boss2Id: number | null = null;
-  // Meta-progression weapon upgrade levels — only ever populated in
-  // Adventure mode (see start()'s weaponUpgrades param).
+  // Meta-progression weapon upgrade levels (see start()'s weaponUpgrades
+  // param) — applies in every solo mode now (v1.0), Endless included.
   private weaponUpgrades: Partial<Record<WeaponId, number>> = {};
 
   // rngSeed is optional and exists mainly for deterministic tests — normal
@@ -108,14 +108,23 @@ export class Game {
   // levelDef is Adventure-mode only — its seed reseeds the RNG so the same
   // level always plays out the same way on repeat attempts (unlike Endless,
   // which stays seeded from the clock for a different run every time).
-  // weaponUpgrades comes from the persistent profile (systems/profile.ts)
-  // and is likewise Adventure-only — Endless always plays with base stats.
-  start(mode: GameMode = "endless", levelDef: LevelDef | null = null, weaponUpgrades: Partial<Record<WeaponId, number>> = {}): void {
+  // weaponUpgrades/weaponSlotCount/startingPerkIds all come from the
+  // persistent profile (systems/profile.ts) — v1.0 made these apply to
+  // every solo mode (Endless included, previously Adventure-only), since
+  // coins are now an account-wide resource earned by any run.
+  start(
+    mode: GameMode = "endless",
+    levelDef: LevelDef | null = null,
+    weaponUpgrades: Partial<Record<WeaponId, number>> = {},
+    weaponSlotCount: 3 | 4 = 3,
+    startingPerkIds: string[] = [],
+  ): void {
     this.mode = mode;
     this.levelDef = mode === "adventure" ? levelDef : null;
-    this.weaponUpgrades = mode === "adventure" ? weaponUpgrades : {};
+    this.weaponUpgrades = weaponUpgrades;
     if (this.levelDef) this.rng = mulberry32(this.levelDef.seed);
     this.player = createPlayer();
+    this.player.weaponSlotCount = weaponSlotCount;
     this.enemies = [];
     this.projectiles = [];
     this.enemyProjectiles = [];
@@ -144,6 +153,15 @@ export class Game {
     this.adventureBoss1Spawned = false;
     this.adventureBoss2Spawned = false;
     this.boss2Id = null;
+    // Armory-bought starting perks — applied once, at rank 1, same as a
+    // real first pick (so a later level-up pick of the same perk correctly
+    // continues at rank 2 via pickedPerks' count).
+    for (const perkId of startingPerkIds) {
+      const perk = getPerkById(perkId);
+      if (!perk) continue;
+      perk.apply(this.player, 1);
+      this.pickedPerks.push({ perk, count: 1 });
+    }
     this.phase = "playing";
   }
 
@@ -381,34 +399,34 @@ export class Game {
     // A duplicate of a weapon type already held levels it up (capped at
     // WEAPON_MAX_LEVEL) instead of prompting a slot swap — no slot is ever
     // empty-checked for this case since pistol (slot 0) isn't droppable, so
-    // a match can only be against slot 1 or 2.
+    // a match can only be against slot 1+.
     const heldSlotIndex = this.player.weaponSlots.findIndex((s) => s?.weaponId === pickup.weaponId);
     if (heldSlotIndex > 0) {
-      const held = this.player.weaponSlots[heldSlotIndex as 1 | 2]!;
+      const held = this.player.weaponSlots[heldSlotIndex as 1 | 2 | 3]!;
       if (held.level < WEAPON_MAX_LEVEL) held.level += 1;
       this.removePickup(pickup.id);
       return;
     }
 
-    const slot2 = this.player.weaponSlots[1];
-    const slot3 = this.player.weaponSlots[2];
-    if (!slot2) {
-      this.equipIntoSlot(1, pickup.weaponId);
-      this.removePickup(pickup.id);
-    } else if (!slot3) {
-      this.equipIntoSlot(2, pickup.weaponId);
-      this.removePickup(pickup.id);
-    } else {
-      this.pendingPickup = pickup;
-      this.phase = "weaponPrompt";
-      this.callbacks.onWeaponPrompt({ weaponId: pickup.weaponId });
+    // First empty droppable slot within weaponSlotCount (3 by default, 4
+    // once the Armory's extra slot is bought) — only prompts a swap once
+    // every held slot is actually full.
+    for (let i = 1; i < this.player.weaponSlotCount; i++) {
+      if (!this.player.weaponSlots[i]) {
+        this.equipIntoSlot(i as 1 | 2 | 3, pickup.weaponId);
+        this.removePickup(pickup.id);
+        return;
+      }
     }
+    this.pendingPickup = pickup;
+    this.phase = "weaponPrompt";
+    this.callbacks.onWeaponPrompt({ weaponId: pickup.weaponId });
   }
 
   // `choice` is null when the player declines — the pickup is discarded
   // either way (equipped into a slot, or simply removed from the world),
   // so there's never a leftover pickup to re-trigger this same prompt.
-  resolveWeaponPrompt(choice: 1 | 2 | null): void {
+  resolveWeaponPrompt(choice: 1 | 2 | 3 | null): void {
     if (this.pendingPickup && choice !== null) {
       this.equipIntoSlot(choice, this.pendingPickup.weaponId);
     }
@@ -417,7 +435,7 @@ export class Game {
     this.phase = "playing";
   }
 
-  private equipIntoSlot(slotIndex: 1 | 2, weaponId: WeaponId): void {
+  private equipIntoSlot(slotIndex: 1 | 2 | 3, weaponId: WeaponId): void {
     this.player.weaponSlots[slotIndex] = createWeaponInstance(weaponId);
   }
 
@@ -461,13 +479,14 @@ export class Game {
     this.applyPerk(perk);
   }
 
-  // Equips (or re-levels, if already held) a weapon directly into slot 1 or
-  // 2 at a specific level, skipping the normal drop/pickup flow.
-  sandboxEquipWeapon(slotIndex: 1 | 2, weaponId: WeaponId, level: number): void {
+  // Equips (or re-levels, if already held) a weapon directly into a
+  // droppable slot at a specific level, skipping the normal drop/pickup
+  // flow.
+  sandboxEquipWeapon(slotIndex: 1 | 2 | 3, weaponId: WeaponId, level: number): void {
     this.player.weaponSlots[slotIndex] = createWeaponInstance(weaponId, level);
   }
 
-  equipSlot(index: 0 | 1 | 2): void {
+  equipSlot(index: 0 | 1 | 2 | 3): void {
     if (this.phase !== "playing") return;
     if (this.player.weaponSlots[index]) this.player.equippedSlot = index;
   }

@@ -603,11 +603,31 @@
   align-items: center;
 }
 
+.shop-scroll {
+  width: 460px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.shop-section-title {
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: #c81e1e;
+  text-align: left;
+  margin: 18px 0 8px;
+  text-transform: uppercase;
+}
+
+.shop-section-title:first-child {
+  margin-top: 0;
+}
+
 .shop-rows {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 420px;
+  width: 100%;
 }
 
 .shop-row {
@@ -632,7 +652,17 @@
   width: 70px;
 }
 
-.shop-upgrade-button {
+.shop-row-desc {
+  flex: 2;
+  width: auto;
+  text-align: left;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.shop-upgrade-button,
+.shop-starting-perk-button,
+.shop-slot-button {
   background: #2a0d0d;
   border: 1px solid #8b0000;
   color: #d8cfc2;
@@ -644,11 +674,15 @@
   transition: background 0.15s;
 }
 
-.shop-upgrade-button:hover:not(:disabled) {
+.shop-upgrade-button:hover:not(:disabled),
+.shop-starting-perk-button:hover:not(:disabled),
+.shop-slot-button:hover:not(:disabled) {
   background: #4a1010;
 }
 
-.shop-upgrade-button:disabled {
+.shop-upgrade-button:disabled,
+.shop-starting-perk-button:disabled,
+.shop-slot-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

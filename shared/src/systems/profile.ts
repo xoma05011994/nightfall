@@ -1,10 +1,11 @@
 import type { WeaponId } from "../types";
 import { LEVELS } from "./levels";
 
-// Meta-progression is Adventure-mode only: coins earned by completing a
-// level persist here and can be spent on permanent per-weapon damage
-// upgrades. Endless mode never reads or writes this — its gold is a
-// per-run stat only (see Game.goldEarned).
+// v1.0 — meta-progression coins are now account-wide: every run (Endless or
+// Adventure, win or lose) banks its gold here (see main.ts's onGameOver/
+// onVictory) rather than only an Adventure win. Weapon upgrades, starting
+// perks, and the extra weapon slot all apply in both modes too — solo-only,
+// multiplayer has no profile/meta-progression concept at all.
 export interface PlayerProfile {
   coins: number;
   weaponUpgrades: Partial<Record<WeaponId, number>>;
@@ -15,14 +16,33 @@ export interface PlayerProfile {
   // always computes damage popups regardless of this, only the renderer's
   // draw call reads it.
   showDamageNumbers: boolean;
+  // v1.0 — Armory purchases. startingPerkIds: perks bought once that are
+  // auto-applied (at rank 1) to a fresh Player every run, on top of
+  // whatever gets picked at level-ups. Only tier-0, non-multiplayer-only
+  // perks are purchasable this way (see shopScreen.ts's eligibility
+  // filter) — nothing that would sit inert without a prerequisite. Each
+  // one purchased only once (a toggle, not a rank).
+  startingPerkIds: string[];
+  // Grows Player.weaponSlotCount from 3 to 4 for the rest of every future
+  // run once bought — a one-time unlock, not a rank.
+  weaponSlotUnlocked: boolean;
 }
 
 const STORAGE_KEY = "nightfall-profile-v1";
 export const MAX_WEAPON_UPGRADE_LEVEL = 5;
 export const WEAPON_UPGRADE_DAMAGE_PER_LEVEL = 0.1; // +10% damage per level
+export const STARTING_PERK_COST = 150;
+export const EXTRA_WEAPON_SLOT_COST = 300;
 
 function defaultProfile(): PlayerProfile {
-  return { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS[0] ? [LEVELS[0].id] : [], showDamageNumbers: true };
+  return {
+    coins: 0,
+    weaponUpgrades: {},
+    unlockedLevelIds: LEVELS[0] ? [LEVELS[0].id] : [],
+    showDamageNumbers: true,
+    startingPerkIds: [],
+    weaponSlotUnlocked: false,
+  };
 }
 
 export function loadProfile(): PlayerProfile {
@@ -40,6 +60,8 @@ export function loadProfile(): PlayerProfile {
       weaponUpgrades: typeof parsed.weaponUpgrades === "object" && parsed.weaponUpgrades !== null ? parsed.weaponUpgrades : {},
       unlockedLevelIds,
       showDamageNumbers: typeof parsed.showDamageNumbers === "boolean" ? parsed.showDamageNumbers : true,
+      startingPerkIds: Array.isArray(parsed.startingPerkIds) ? parsed.startingPerkIds.filter((id): id is string => typeof id === "string") : [],
+      weaponSlotUnlocked: typeof parsed.weaponSlotUnlocked === "boolean" ? parsed.weaponSlotUnlocked : false,
     };
   } catch {
     return defaultProfile();
@@ -93,4 +115,24 @@ export function purchaseWeaponUpgrade(profile: PlayerProfile, weaponId: WeaponId
     coins: profile.coins - cost,
     weaponUpgrades: { ...profile.weaponUpgrades, [weaponId]: currentLevel + 1 },
   };
+}
+
+// Returns a new profile with `perkId` added to startingPerkIds, or null if
+// it's already owned or coins are insufficient — never mutates the input.
+export function purchaseStartingPerk(profile: PlayerProfile, perkId: string): PlayerProfile | null {
+  if (profile.startingPerkIds.includes(perkId)) return null;
+  if (profile.coins < STARTING_PERK_COST) return null;
+  return {
+    ...profile,
+    coins: profile.coins - STARTING_PERK_COST,
+    startingPerkIds: [...profile.startingPerkIds, perkId],
+  };
+}
+
+// Returns a new profile with weaponSlotUnlocked set, or null if it's already
+// unlocked or coins are insufficient — never mutates the input.
+export function purchaseExtraWeaponSlot(profile: PlayerProfile): PlayerProfile | null {
+  if (profile.weaponSlotUnlocked) return null;
+  if (profile.coins < EXTRA_WEAPON_SLOT_COST) return null;
+  return { ...profile, coins: profile.coins - EXTRA_WEAPON_SLOT_COST, weaponSlotUnlocked: true };
 }

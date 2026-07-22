@@ -43,7 +43,11 @@ export interface WeaponInstance {
   level: number;
 }
 
-export type WeaponSlots = [WeaponInstance, WeaponInstance | null, WeaponInstance | null];
+// Slot 0 is always the pistol (locked, never dropped/swapped); slots 1-3 are
+// pickup-only. Slot 3 only exists once the Armory's extra weapon slot is
+// purchased (see Player.weaponSlotCount) — solo-only meta-progression,
+// multiplayer players always stay at weaponSlotCount 3 and never reach it.
+export type WeaponSlots = [WeaponInstance, WeaponInstance | null, WeaponInstance | null, WeaponInstance | null];
 
 export interface Player {
   position: Vec2;
@@ -59,7 +63,11 @@ export interface Player {
   attackCooldownMultiplier: number;
   extraProjectiles: number;
   weaponSlots: WeaponSlots;
-  equippedSlot: 0 | 1 | 2;
+  equippedSlot: 0 | 1 | 2 | 3;
+  // How many of weaponSlots are actually usable — 3 by default (pistol +
+  // 2 droppable), 4 once the Armory's extra weapon slot is bought. See
+  // WeaponSlots' doc comment.
+  weaponSlotCount: 3 | 4;
   // Perk-granted mechanics — all 0/inert until the relevant perk is picked.
   pierce: number;
   igniteDamagePerTick: number;

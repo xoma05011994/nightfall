@@ -15,7 +15,8 @@ export interface HudData {
   elapsedMs: number;
   kills: number;
   gold: number;
-  slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+  // 3 slots by default, 4 once the Armory's extra weapon slot is bought.
+  slots: HudWeaponSlot[];
   ammo: number;
   magazineSize: number;
   reloading: boolean;
@@ -64,6 +65,7 @@ export class Hud {
           <div class="weapon-slot" data-slot="0"><span class="weapon-slot-key">1</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">Sidearm</span><span class="weapon-slot-level"></span></div>
           <div class="weapon-slot" data-slot="1"><span class="weapon-slot-key">2</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
           <div class="weapon-slot" data-slot="2"><span class="weapon-slot-key">3</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
+          <div class="weapon-slot" data-slot="3" style="display:none"><span class="weapon-slot-key">4</span><img class="weapon-slot-icon" alt="" /><span class="weapon-slot-name">—</span><span class="weapon-slot-level"></span></div>
         </div>
         <div class="hud-ammo-track"><div class="hud-ammo-fill" style="width:100%"></div></div>
         <div class="hud-ammo-text">10 / 10</div>
@@ -94,9 +96,14 @@ export class Hud {
     this.killsEl.textContent = `Kills: ${data.kills}`;
     this.goldEl.textContent = `Gold: ${data.gold}`;
 
-    data.slots.forEach((slot, i) => {
-      const el = this.slotEls[i];
-      if (!el) return;
+    // Slot 3 (the 4th box) only exists in the DOM once weaponSlotCount is
+    // 4 — hidden by default in the template, shown here the moment a
+    // caller actually passes 4 slots.
+    this.slotEls[3]!.style.display = data.slots.length > 3 ? "" : "none";
+
+    this.slotEls.forEach((el, i) => {
+      const slot = data.slots[i];
+      if (!slot) return;
       el.classList.toggle("equipped", slot.equipped);
       el.classList.toggle("empty", slot.name === null);
       el.classList.toggle("maxed", slot.maxed);

@@ -18,7 +18,7 @@ import { Game } from "./game/Game";
 import { MultiplayerGame } from "./net/MultiplayerGame";
 import type { MatchSnapshot } from "@nightfall/shared/multiplayer";
 import { LEVELS } from "@nightfall/shared/systems/levels";
-import { loadProfile, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
+import { loadProfile, purchaseExtraWeaponSlot, purchaseStartingPerk, purchaseWeaponUpgrade, saveProfile, unlockNextLevel } from "@nightfall/shared/systems/profile";
 import { WEAPON_DEFS, isWeaponMaxLevel } from "@nightfall/shared/systems/weapons";
 import { getPerkById } from "@nightfall/shared/systems/perks";
 import { normalize } from "@nightfall/shared/math";
@@ -193,7 +193,7 @@ const multiplayerScreen = new MultiplayerScreen(uiRoot, {
 
 function startRun(mode: GameMode, levelDef: LevelDef | null): void {
   renderer.setPalette(levelDef?.palette ?? null);
-  game.start(mode, levelDef, profile.weaponUpgrades);
+  game.start(mode, levelDef, profile.weaponUpgrades, profile.weaponSlotUnlocked ? 4 : 3, profile.startingPerkIds);
   hud.setVisible(true);
   perkTray.setVisible(true);
   sandboxPanel.setVisible(mode === "sandbox");
@@ -225,9 +225,8 @@ const levelSelectScreen = new LevelSelectScreen(
   },
 );
 
-const shopScreen = new ShopScreen(
-  uiRoot,
-  (weaponId) => {
+const shopScreen = new ShopScreen(uiRoot, {
+  onUpgradeWeapon: (weaponId) => {
     const updated = purchaseWeaponUpgrade(profile, weaponId);
     if (updated) {
       profile = updated;
@@ -235,11 +234,27 @@ const shopScreen = new ShopScreen(
     }
     shopScreen.show(profile);
   },
-  () => {
+  onBuyStartingPerk: (perkId) => {
+    const updated = purchaseStartingPerk(profile, perkId);
+    if (updated) {
+      profile = updated;
+      saveProfile(profile);
+    }
+    shopScreen.show(profile);
+  },
+  onBuyExtraWeaponSlot: () => {
+    const updated = purchaseExtraWeaponSlot(profile);
+    if (updated) {
+      profile = updated;
+      saveProfile(profile);
+    }
+    shopScreen.show(profile);
+  },
+  onBack: () => {
     shopScreen.hide();
     showMainMenu();
   },
-);
+});
 
 const mainMenu = new MainMenu(uiRoot, {
   onEndless: () => {
@@ -280,14 +295,13 @@ const game = new Game({
     });
   },
   onWeaponPrompt: (info) => {
-    const slot2 = game.player.weaponSlots[1];
-    const slot3 = game.player.weaponSlots[2];
+    const heldSlots: { slotIndex: 1 | 2 | 3; name: string }[] = [];
+    for (let i = 1; i < game.player.weaponSlotCount; i++) {
+      const slot = game.player.weaponSlots[i];
+      if (slot) heldSlots.push({ slotIndex: i as 1 | 2 | 3, name: WEAPON_DEFS[slot.weaponId].name });
+    }
     weaponPromptModal.show(
-      {
-        incomingName: WEAPON_DEFS[info.weaponId].name,
-        slot2Name: slot2 ? WEAPON_DEFS[slot2.weaponId].name : "—",
-        slot3Name: slot3 ? WEAPON_DEFS[slot3.weaponId].name : "—",
-      },
+      { incomingName: WEAPON_DEFS[info.weaponId].name, heldSlots },
       (choice) => {
         game.resolveWeaponPrompt(choice);
       },
@@ -296,20 +310,25 @@ const game = new Game({
   onGameOver: () => {
     hud.setVisible(false);
     perkTray.setVisible(false);
+    // v1.0 — every run's gold now banks to the persistent profile when it
+    // ends, win or lose, Endless or Adventure (previously only an
+    // Adventure win banked anything; a defeat or an Endless run just lost
+    // its gold). onGameOver can't fire for Sandbox (Game.ts's own
+    // "mode !== sandbox" guard on the death check), so no mode check
+    // needed here.
+    profile = { ...profile, coins: profile.coins + game.goldEarned };
+    saveProfile(profile);
     gameOverScreen.show({ won: false, elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills, gold: game.goldEarned });
   },
   onVictory: () => {
     hud.setVisible(false);
     perkTray.setVisible(false);
-    // Coins only bank to the persistent profile on an actual level
-    // completion — a defeat still shows the run's gold total, but it's
-    // never saved (see systems/profile.ts). Winning also unlocks the next
-    // level in sequence.
-    if (game.mode === "adventure") {
-      profile = { ...profile, coins: profile.coins + game.goldEarned };
-      if (game.levelDef) profile = unlockNextLevel(profile, game.levelDef.id);
-      saveProfile(profile);
-    }
+    // onVictory only ever fires for an Adventure win (Endless has no win
+    // condition), but banks unconditionally same as onGameOver for
+    // consistency. Winning also unlocks the next level in sequence.
+    profile = { ...profile, coins: profile.coins + game.goldEarned };
+    if (game.mode === "adventure" && game.levelDef) profile = unlockNextLevel(profile, game.levelDef.id);
+    saveProfile(profile);
     gameOverScreen.show({ won: true, elapsedMs: game.elapsedMs, level: game.player.level, kills: game.kills, gold: game.goldEarned });
   },
 });
@@ -433,6 +452,7 @@ function frame(now: number): void {
   if (input.consumeJustPressed("Digit1")) game.equipSlot(0);
   if (input.consumeJustPressed("Digit2")) game.equipSlot(1);
   if (input.consumeJustPressed("Digit3")) game.equipSlot(2);
+  if (input.consumeJustPressed("Digit4")) game.equipSlot(3);
   if (input.consumeJustPressed("KeyR")) game.reloadEquipped();
   if (input.consumeJustPressed("Escape")) {
     if (game.phase === "playing") {
@@ -458,8 +478,9 @@ function frame(now: number): void {
   }
 
   if (game.phase === "playing" || game.phase === "paused" || game.phase === "levelup" || game.phase === "weaponPrompt") {
-    const slots: [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot] = [0, 1, 2].map((i) => {
-      const slot = game.player.weaponSlots[i as 0 | 1 | 2];
+    const slotIndices = Array.from({ length: game.player.weaponSlotCount }, (_, i) => i);
+    const slots: HudWeaponSlot[] = slotIndices.map((i) => {
+      const slot = game.player.weaponSlots[i as 0 | 1 | 2 | 3];
       return {
         name: slot ? WEAPON_DEFS[slot.weaponId].name : null,
         equipped: game.player.equippedSlot === i,
@@ -467,7 +488,7 @@ function frame(now: number): void {
         level: slot?.level ?? 1,
         maxed: slot ? isWeaponMaxLevel(slot.level) : false,
       };
-    }) as [HudWeaponSlot, HudWeaponSlot, HudWeaponSlot];
+    });
 
     const equipped = game.player.weaponSlots[game.player.equippedSlot];
     const equippedDef = equipped ? WEAPON_DEFS[equipped.weaponId] : null;
