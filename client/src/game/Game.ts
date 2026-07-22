@@ -3,6 +3,7 @@ import {
   ADVENTURE_DURATION_MS,
   BOSS_RADIUS,
   CHEST_SPAWN_INTERVAL_MS,
+  DAMAGE_POPUP_LIFETIME_MS,
   ENEMY_RADIUS,
   MOMENTUM_DURATION_MS,
   MOMENTUM_MAX_STACKS,
@@ -32,6 +33,7 @@ import type {
   GameMode,
   GamePhase,
   LevelDef,
+  DamagePopupEffect,
   LightningEffect,
   Obstacle,
   Perk,
@@ -68,6 +70,7 @@ export class Game {
   coneEffects: ConeEffect[] = [];
   lightningEffects: LightningEffect[] = [];
   rewardPopups: RewardPopupEffect[] = [];
+  damagePopups: DamagePopupEffect[] = [];
   elapsedMs = 0;
   kills = 0;
   goldEarned = 0;
@@ -123,6 +126,7 @@ export class Game {
     this.coneEffects = [];
     this.lightningEffects = [];
     this.rewardPopups = [];
+    this.damagePopups = [];
     this.elapsedMs = 0;
     this.kills = 0;
     this.goldEarned = 0;
@@ -142,7 +146,29 @@ export class Game {
     this.phase = "playing";
   }
 
+  // Thin wrapper around updateInner() — snapshots every enemy's hp before
+  // the step and diffs against it after, pushing one damage popup per
+  // enemy that lost hp and survived the step. Centralizing this here (one
+  // diff at the boundary) instead of pushing a popup at every individual
+  // damage call site means it automatically covers every current and
+  // future damage source without needing to instrument each one — the
+  // tradeoff is a killing blow's damage isn't shown (the enemy's already
+  // gone from the array by the time this diffs), which is an acceptable
+  // gap given the death itself (removal + xp orb) is its own clear signal.
   update(dt: number, moveVector: Vec2, aimDir: Vec2, fireHeld: boolean, nowMs: number): void {
+    const hpBefore = new Map<number, number>();
+    for (const e of this.enemies) hpBefore.set(e.id, e.hp);
+    this.updateInner(dt, moveVector, aimDir, fireHeld, nowMs);
+    this.damagePopups = this.damagePopups.filter((p) => p.expiresAtMs > nowMs);
+    for (const e of this.enemies) {
+      const before = hpBefore.get(e.id);
+      if (before !== undefined && e.hp < before) {
+        this.damagePopups.push({ position: { ...e.position }, amount: Math.round(before - e.hp), startMs: nowMs, expiresAtMs: nowMs + DAMAGE_POPUP_LIFETIME_MS });
+      }
+    }
+  }
+
+  private updateInner(dt: number, moveVector: Vec2, aimDir: Vec2, fireHeld: boolean, nowMs: number): void {
     if (this.phase !== "playing") return;
 
     this.player.position.x += moveVector.x * this.player.moveSpeed * dt;

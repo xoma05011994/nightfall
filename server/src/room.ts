@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import {
   CHAIN_LINK_TICK_MS,
   CHEST_SPAWN_INTERVAL_MS,
+  DAMAGE_POPUP_LIFETIME_MS,
   ENEMY_RADIUS,
   MATCH_TICK_MS,
   MAX_PARTY_SIZE,
@@ -36,6 +37,7 @@ import type {
   BeamEffect,
   Chest,
   ConeEffect,
+  DamagePopupEffect,
   Enemy,
   LightningEffect,
   Obstacle,
@@ -102,6 +104,7 @@ export class Room {
   private coneEffects: ConeEffect[] = [];
   private lightningEffects: LightningEffect[] = [];
   private rewardPopups: RewardPopupEffect[] = [];
+  private damagePopups: DamagePopupEffect[] = [];
 
   // M3: XP is a shared party pool, not per-player — single source of truth
   // for level/xp/xpToNext, mirrored onto every player's own Player fields
@@ -353,7 +356,26 @@ export class Room {
     }
   }
 
+  // Thin wrapper around stepInner() — same hp-before/after diff approach as
+  // solo Game.ts's update(), see that method's doc comment for the
+  // reasoning (one central diff instead of instrumenting every damage call
+  // site; a killing blow's damage isn't shown since the enemy's already
+  // gone from the array by the time this diffs).
   private step(): void {
+    const nowMs = Date.now();
+    const hpBefore = new Map<number, number>();
+    for (const e of this.enemies) hpBefore.set(e.id, e.hp);
+    this.stepInner();
+    this.damagePopups = this.damagePopups.filter((p) => p.expiresAtMs > nowMs);
+    for (const e of this.enemies) {
+      const before = hpBefore.get(e.id);
+      if (before !== undefined && e.hp < before) {
+        this.damagePopups.push({ position: { ...e.position }, amount: Math.round(before - e.hp), startMs: nowMs, expiresAtMs: nowMs + DAMAGE_POPUP_LIFETIME_MS });
+      }
+    }
+  }
+
+  private stepInner(): void {
     const dt = MATCH_TICK_MS / 1000;
     const nowMs = Date.now();
     const connected = this.connectedEntries();
@@ -581,6 +603,7 @@ export class Room {
       coneEffects: this.coneEffects,
       lightningEffects: this.lightningEffects,
       rewardPopups: this.rewardPopups,
+      damagePopups: this.damagePopups,
     };
     this.broadcast({ type: "snapshot", payload: snapshot });
   }

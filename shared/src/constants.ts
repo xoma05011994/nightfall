@@ -159,6 +159,13 @@ export const SHOOTER_PROJECTILE_TTL_MS = 3500;
 export const SHOOTER_FIRE_COOLDOWN_MS = 2200;
 export const SHOOTER_PROJECTILE_COLOR = "#b23fff";
 
+// v0.87 — floating damage numbers over hit enemies (toggleable, see
+// profile.ts's showDamageNumbers). Short-lived and rises less than the
+// chest reward popups since these fire constantly during combat rather
+// than as a rare event.
+export const DAMAGE_POPUP_LIFETIME_MS = 650;
+export const DAMAGE_POPUP_RISE_PX = 30;
+
 // v0.86 — static terrain obstacles (trees/lakes/holes) that block the
 // player's movement only, scattered once per run/room. Kept off the
 // immediate spawn area and spaced apart from each other so they read as

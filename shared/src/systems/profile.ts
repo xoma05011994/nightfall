@@ -11,6 +11,10 @@ export interface PlayerProfile {
   // Levels are locked by default — only LEVELS[0] starts unlocked. Winning a
   // level (killing its 6-minute boss) unlocks the next one in LEVELS order.
   unlockedLevelIds: string[];
+  // Purely a rendering toggle (see types.ts's DamagePopupEffect) — the sim
+  // always computes damage popups regardless of this, only the renderer's
+  // draw call reads it.
+  showDamageNumbers: boolean;
 }
 
 const STORAGE_KEY = "nightfall-profile-v1";
@@ -18,7 +22,7 @@ export const MAX_WEAPON_UPGRADE_LEVEL = 5;
 export const WEAPON_UPGRADE_DAMAGE_PER_LEVEL = 0.1; // +10% damage per level
 
 function defaultProfile(): PlayerProfile {
-  return { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS[0] ? [LEVELS[0].id] : [] };
+  return { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS[0] ? [LEVELS[0].id] : [], showDamageNumbers: true };
 }
 
 export function loadProfile(): PlayerProfile {
@@ -35,6 +39,7 @@ export function loadProfile(): PlayerProfile {
       coins: typeof parsed.coins === "number" && parsed.coins >= 0 ? parsed.coins : 0,
       weaponUpgrades: typeof parsed.weaponUpgrades === "object" && parsed.weaponUpgrades !== null ? parsed.weaponUpgrades : {},
       unlockedLevelIds,
+      showDamageNumbers: typeof parsed.showDamageNumbers === "boolean" ? parsed.showDamageNumbers : true,
     };
   } catch {
     return defaultProfile();

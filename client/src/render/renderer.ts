@@ -1,10 +1,9 @@
-import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
+import { DAMAGE_POPUP_LIFETIME_MS, DAMAGE_POPUP_RISE_PX, FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, SHURIKEN_ORBIT_RADIUS, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
 import { drawWeaponIcon } from "./weaponIcons";
 import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, rotationForAngle, rotationToFace, type PlayerColor } from "./entityIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import { shurikenAngle } from "@nightfall/shared/systems/statusEffects";
-import { SHURIKEN_ORBIT_RADIUS } from "@nightfall/shared/constants";
-import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
+import type { BeamEffect, Chest, ConeEffect, DamagePopupEffect, Enemy, LevelPalette, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
 
 // A co-op teammate to render, with the color assigned by their index in the
@@ -35,6 +34,11 @@ export interface RenderState {
   coneEffects: ConeEffect[];
   lightningEffects: LightningEffect[];
   rewardPopups: RewardPopupEffect[];
+  damagePopups: DamagePopupEffect[];
+  // Purely a draw-time toggle (systems compute damagePopups regardless) —
+  // defaults to true so callers that don't wire up the profile setting
+  // still see them.
+  showDamageNumbers?: boolean;
   // Co-op only — the rest of the party, drawn alongside the local player.
   // Undefined/empty in solo.
   otherPlayers?: RemotePlayerRenderInfo[];
@@ -171,6 +175,7 @@ export class Renderer {
       for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
     }
     this.drawRewardPopups(state.rewardPopups, nowMs);
+    if (state.showDamageNumbers ?? true) this.drawDamagePopups(state.damagePopups, nowMs);
 
     ctx.restore();
 
@@ -181,7 +186,7 @@ export class Renderer {
   // the camera and reuses the same solo draw calls; the rest of the party is
   // drawn via drawRemotePlayer) and delegates to the normal render() — this
   // keeps one drawing pipeline for both solo and multiplayer.
-  renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, localAimAngle: number, nowMs: number): void {
+  renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, localAimAngle: number, showDamageNumbers: boolean, nowMs: number): void {
     const localIndex = snapshot.players.findIndex((p) => p.id === localPlayerId);
     if (localIndex === -1) return;
     const local = snapshot.players[localIndex]!;
@@ -204,6 +209,8 @@ export class Renderer {
         coneEffects: snapshot.coneEffects,
         lightningEffects: snapshot.lightningEffects,
         rewardPopups: snapshot.rewardPopups,
+        damagePopups: snapshot.damagePopups,
+        showDamageNumbers,
         otherPlayers,
       },
       nowMs,
@@ -681,6 +688,30 @@ export class Renderer {
       drawWeaponIcon(ctx, pickup.weaponId, pickup.radius * 2 * pulse * WEAPON_ICON_WORLD_SCALE);
       ctx.restore();
     }
+  }
+
+  // Floating damage numbers — small, quick, and numerous (they fire
+  // constantly during combat), so deliberately terser than the chest
+  // reward popups: no icon, shorter rise/lifetime, size nudges up with the
+  // hit's size so a big hit reads as "big" at a glance.
+  private drawDamagePopups(popups: DamagePopupEffect[], nowMs: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+    for (const popup of popups) {
+      const life = (popup.expiresAtMs - nowMs) / DAMAGE_POPUP_LIFETIME_MS;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
+      const risen = (1 - life) * DAMAGE_POPUP_RISE_PX;
+      const fontSize = Math.min(22, 12 + Math.sqrt(popup.amount));
+      ctx.globalAlpha = alpha;
+      ctx.font = `bold ${fontSize}px Georgia`;
+      ctx.fillStyle = "#ffcf4a";
+      ctx.shadowColor = "#000000";
+      ctx.shadowBlur = 3;
+      ctx.fillText(String(popup.amount), popup.position.x, popup.position.y - 24 - risen);
+    }
+    ctx.restore();
   }
 
   private drawRewardPopups(popups: RewardPopupEffect[], nowMs: number): void {

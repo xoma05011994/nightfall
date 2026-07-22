@@ -5,6 +5,10 @@ export interface MainMenuHandlers {
   onSandbox: () => void;
   onPerkTree: () => void;
   onMultiplayer: () => void;
+  // Damage-numbers toggle (persisted to the profile by the caller) — the
+  // menu just reflects/reports it, it doesn't own the setting itself.
+  getShowDamageNumbers: () => boolean;
+  onToggleDamageNumbers: (value: boolean) => void;
 }
 
 // SANDBOX and PERK TREE are dev/inspection tools, hidden from the menu until
@@ -35,6 +39,10 @@ export class MainMenu {
         <button class="mm-nav-button" data-action="sandbox" style="display:none">SANDBOX</button>
         <button class="mm-nav-button" data-action="perkTree" style="display:none">PERK TREE</button>
       </div>
+      <label class="mm-toggle">
+        <input type="checkbox" data-action="damageNumbers" />
+        <span>Damage Numbers</span>
+      </label>
     `;
     container.appendChild(this.root);
     this.root.querySelector('[data-action="endless"]')!.addEventListener("click", handlers.onEndless);
@@ -43,6 +51,10 @@ export class MainMenu {
     this.root.querySelector('[data-action="shop"]')!.addEventListener("click", handlers.onShop);
     this.root.querySelector('[data-action="sandbox"]')!.addEventListener("click", handlers.onSandbox);
     this.root.querySelector('[data-action="perkTree"]')!.addEventListener("click", handlers.onPerkTree);
+
+    const damageNumbersCheckbox = this.root.querySelector<HTMLInputElement>('[data-action="damageNumbers"]')!;
+    damageNumbersCheckbox.checked = handlers.getShowDamageNumbers();
+    damageNumbersCheckbox.addEventListener("change", () => handlers.onToggleDamageNumbers(damageNumbersCheckbox.checked));
 
     this.secretButtons = [this.root.querySelector('[data-action="sandbox"]')!, this.root.querySelector('[data-action="perkTree"]')!];
 

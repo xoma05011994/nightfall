@@ -328,6 +328,26 @@
   width: 100%;
 }
 
+.mm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: rgba(216, 207, 194, 0.55);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mm-toggle input[type="checkbox"] {
+  accent-color: #c81e1e;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
 .perk-cards {
   display: flex;
   gap: 20px;

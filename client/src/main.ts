@@ -266,6 +266,11 @@ const mainMenu = new MainMenu(uiRoot, {
     mainMenu.hide();
     multiplayerScreen.show();
   },
+  getShowDamageNumbers: () => profile.showDamageNumbers,
+  onToggleDamageNumbers: (value) => {
+    profile.showDamageNumbers = value;
+    saveProfile(profile);
+  },
 });
 
 const game = new Game({
@@ -329,6 +334,8 @@ function buildRenderState(aimAngle: number = Math.PI / 2) {
     lightningEffects: game.lightningEffects,
     enemyProjectiles: game.enemyProjectiles,
     rewardPopups: game.rewardPopups,
+    damagePopups: game.damagePopups,
+    showDamageNumbers: profile.showDamageNumbers,
   };
 }
 
@@ -384,7 +391,7 @@ function frame(now: number): void {
           snapshot.hostId,
           multiplayerGame.playerId,
         );
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), profile.showDamageNumbers, now);
       }
     } else if (phase === "paused") {
       multiplayerLobby.hide();
@@ -393,7 +400,7 @@ function frame(now: number): void {
       hud.setVisible(true);
       if (input.consumeJustPressed("Escape")) multiplayerGame.resume();
       if (snapshot) {
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), profile.showDamageNumbers, now);
         updateMultiplayerHud(snapshot);
       }
     } else {
@@ -415,7 +422,7 @@ function frame(now: number): void {
       }
       multiplayerGame.sendInput(dt, moveVector, aimDir, isGhost ? false : fireHeld);
       if (snapshot) {
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), profile.showDamageNumbers, now);
         updateMultiplayerHud(snapshot);
       }
     }

@@ -40,14 +40,21 @@ describe("loadProfile", () => {
     expect(profile.coins).toBe(0);
     expect(profile.weaponUpgrades).toEqual({});
     expect(profile.unlockedLevelIds).toEqual([LEVELS[0]!.id]);
+    expect(profile.showDamageNumbers).toBe(true);
   });
 
   it("round-trips through saveProfile", () => {
-    saveProfile({ coins: 120, weaponUpgrades: { pistol: 2 }, unlockedLevelIds: [LEVELS[0]!.id, LEVELS[1]!.id] });
+    saveProfile({ coins: 120, weaponUpgrades: { pistol: 2 }, unlockedLevelIds: [LEVELS[0]!.id, LEVELS[1]!.id], showDamageNumbers: false });
     const profile = loadProfile();
     expect(profile.coins).toBe(120);
     expect(profile.weaponUpgrades.pistol).toBe(2);
     expect(profile.unlockedLevelIds).toEqual([LEVELS[0]!.id, LEVELS[1]!.id]);
+    expect(profile.showDamageNumbers).toBe(false);
+  });
+
+  it("falls back to showDamageNumbers: true when the stored value isn't a boolean", () => {
+    localStorage.setItem("nightfall-profile-v1", JSON.stringify({ coins: 0, weaponUpgrades: {}, unlockedLevelIds: [], showDamageNumbers: "nope" }));
+    expect(loadProfile().showDamageNumbers).toBe(true);
   });
 
   it("falls back to a default profile on corrupt stored JSON", () => {
@@ -69,7 +76,7 @@ describe("loadProfile", () => {
 
 describe("getWeaponUpgradeLevel", () => {
   it("returns 0 for a weapon with no recorded upgrade", () => {
-    expect(getWeaponUpgradeLevel({ coins: 0, weaponUpgrades: {}, unlockedLevelIds: [] }, "pistol")).toBe(0);
+    expect(getWeaponUpgradeLevel({ coins: 0, weaponUpgrades: {}, unlockedLevelIds: [], showDamageNumbers: true }, "pistol")).toBe(0);
   });
 });
 
@@ -95,7 +102,7 @@ describe("isLevelUnlocked / unlockNextLevel", () => {
 
   it("is a no-op past the last level", () => {
     const lastLevel = LEVELS[LEVELS.length - 1]!;
-    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS.map((l) => l.id) };
+    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: LEVELS.map((l) => l.id), showDamageNumbers: true };
     const updated = unlockNextLevel(profile, lastLevel.id);
     expect(updated.unlockedLevelIds).toEqual(profile.unlockedLevelIds);
   });
@@ -121,7 +128,7 @@ describe("weaponDamageMultiplier", () => {
 
 describe("purchaseWeaponUpgrade", () => {
   it("deducts the cost and increments the level on a successful purchase", () => {
-    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [] };
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [], showDamageNumbers: true };
     const result = purchaseWeaponUpgrade(profile, "pistol");
     expect(result).not.toBeNull();
     expect(result!.coins).toBe(100 - upgradeCost(0));
@@ -129,25 +136,25 @@ describe("purchaseWeaponUpgrade", () => {
   });
 
   it("does not mutate the input profile", () => {
-    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [] };
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [], showDamageNumbers: true };
     purchaseWeaponUpgrade(profile, "pistol");
     expect(profile.coins).toBe(100);
     expect(profile.weaponUpgrades).toEqual({});
   });
 
   it("preserves unlockedLevelIds on the returned profile", () => {
-    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [LEVELS[0]!.id] };
+    const profile = { coins: 100, weaponUpgrades: {}, unlockedLevelIds: [LEVELS[0]!.id], showDamageNumbers: true };
     const result = purchaseWeaponUpgrade(profile, "pistol");
     expect(result!.unlockedLevelIds).toEqual([LEVELS[0]!.id]);
   });
 
   it("returns null when the player can't afford the next level", () => {
-    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: [] };
+    const profile = { coins: 0, weaponUpgrades: {}, unlockedLevelIds: [], showDamageNumbers: true };
     expect(purchaseWeaponUpgrade(profile, "pistol")).toBeNull();
   });
 
   it("returns null once a weapon is already at the max upgrade level", () => {
-    const profile = { coins: 999_999, weaponUpgrades: { pistol: MAX_WEAPON_UPGRADE_LEVEL }, unlockedLevelIds: [] };
+    const profile = { coins: 999_999, weaponUpgrades: { pistol: MAX_WEAPON_UPGRADE_LEVEL }, unlockedLevelIds: [], showDamageNumbers: true };
     expect(purchaseWeaponUpgrade(profile, "pistol")).toBeNull();
   });
 });

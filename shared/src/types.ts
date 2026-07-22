@@ -231,6 +231,21 @@ export interface LightningEffect {
   seed: number;
 }
 
+// Floating damage numbers over anything that took damage this
+// frame/tick — computed by diffing enemy hp before/after the whole
+// simulation step runs (see Game.ts/room.ts), not pushed individually at
+// every damage call site, so it automatically covers every current and
+// future damage source without needing to instrument each one. Purely
+// cosmetic — see profile.ts's showDamageNumbers for the on/off toggle,
+// which only gates whether the renderer draws these, not whether the sim
+// computes them.
+export interface DamagePopupEffect {
+  position: Vec2;
+  amount: number;
+  startMs: number;
+  expiresAtMs: number;
+}
+
 export type RewardPopupKind = "gold" | "xp" | "perk" | "magnet";
 
 // A chest-open reward — floats up and fades above the player so what dropped
