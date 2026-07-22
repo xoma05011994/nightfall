@@ -411,19 +411,34 @@ export class Renderer {
     ctx.restore();
   }
 
+  // Two passes per beam: a wide, low-alpha "glow" stroke underneath a
+  // narrow, near-opaque "core" stroke on top — reads as a much more
+  // luminous laser than a single flat-color line, without needing a
+  // gradient (shadowBlur alone does the diffusion).
   private drawBeamEffects(beams: BeamEffect[], nowMs: number): void {
     const ctx = this.ctx;
     ctx.save();
+    ctx.lineCap = "round";
     for (const beam of beams) {
       const life = (beam.expiresAtMs - nowMs) / BEAM_EFFECT_LIFETIME_MS;
-      ctx.globalAlpha = Math.max(0, Math.min(1, life));
-      ctx.strokeStyle = beam.color;
-      ctx.shadowColor = beam.color;
-      ctx.shadowBlur = 12;
-      ctx.lineWidth = 4;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
+
       ctx.beginPath();
       ctx.moveTo(beam.from.x, beam.from.y);
       ctx.lineTo(beam.to.x, beam.to.y);
+
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.strokeStyle = beam.color;
+      ctx.shadowColor = beam.color;
+      ctx.shadowBlur = 22;
+      ctx.lineWidth = 12;
+      ctx.stroke();
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowBlur = 16;
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
     ctx.restore();
@@ -463,21 +478,62 @@ export class Renderer {
     ctx.restore();
   }
 
+  // Flamethrower cone, layered instead of a single flat-color wedge: a warm
+  // radial gradient (white-hot near the player, fading through orange to
+  // transparent at the tip) for the body of the flame, a narrower brighter
+  // "hot core" wedge on top, and a handful of ember specks scattered inside
+  // — each cone effect only lives ~100ms, but the weapon refires every
+  // 60ms, so consecutive overlapping cones is what actually reads as a
+  // flickering flame rather than a static shape. Ember positions are
+  // deterministic per-effect (seeded from its expiry + fire count) so they
+  // don't need any persistent particle state.
   private drawConeEffects(cones: ConeEffect[], nowMs: number): void {
     const ctx = this.ctx;
-    ctx.save();
     for (const cone of cones) {
       const life = (cone.expiresAtMs - nowMs) / CONE_EFFECT_LIFETIME_MS;
-      ctx.globalAlpha = Math.max(0, Math.min(1, life)) * 0.5;
-      ctx.fillStyle = cone.color;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
       const angle = Math.atan2(cone.direction.y, cone.direction.x);
+      const seed = cone.expiresAtMs + cone.origin.x + cone.origin.y * 3;
+
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.7;
+      const gradient = ctx.createRadialGradient(cone.origin.x, cone.origin.y, 0, cone.origin.x, cone.origin.y, cone.rangeUnits);
+      gradient.addColorStop(0, "rgba(255, 235, 150, 0.95)");
+      gradient.addColorStop(0.35, "rgba(255, 140, 40, 0.75)");
+      gradient.addColorStop(1, "rgba(120, 20, 0, 0)");
+      ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.moveTo(cone.origin.x, cone.origin.y);
       ctx.arc(cone.origin.x, cone.origin.y, cone.rangeUnits, angle - cone.angleRad / 2, angle + cone.angleRad / 2);
       ctx.closePath();
       ctx.fill();
+
+      // Hot core — a narrower, shorter wedge for a brighter flame center.
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = "rgba(255, 250, 210, 0.9)";
+      ctx.beginPath();
+      ctx.moveTo(cone.origin.x, cone.origin.y);
+      ctx.arc(cone.origin.x, cone.origin.y, cone.rangeUnits * 0.55, angle - cone.angleRad * 0.28, angle + cone.angleRad * 0.28);
+      ctx.closePath();
+      ctx.fill();
+
+      // Embers — small glowing specks scattered along the cone's length.
+      ctx.fillStyle = "#ffcf4a";
+      ctx.shadowColor = "#ff6a00";
+      ctx.shadowBlur = 6;
+      for (let i = 0; i < 5; i++) {
+        const t = 0.3 + 0.65 * ((seededJitter(seed, i * 2) + 1) / 2);
+        const spread = seededJitter(seed, i * 2 + 1) * cone.angleRad * 0.45;
+        const r = cone.rangeUnits * t;
+        const a = angle + spread;
+        ctx.globalAlpha = alpha * (0.5 + 0.5 * (1 - t));
+        ctx.beginPath();
+        ctx.arc(cone.origin.x + Math.cos(a) * r, cone.origin.y + Math.sin(a) * r, 2 + 1.5 * (1 - t), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   private drawChests(chests: Chest[], nowMs: number): void {
