@@ -88,6 +88,13 @@ export interface Player {
   // targeted, takes no damage, collects nothing) until a teammate picks the
   // Revive perk. Always false in solo (solo has its own game-over flow).
   isGhost: boolean;
+  // Which way the player sprite is rotated to face, in atan2(dy, dx)
+  // radians — Math.PI / 2 ("down") is the sprite art's neutral/unrotated
+  // orientation. Solo renders the local player from live mouse input
+  // directly and never touches this field; multiplayer's server updates it
+  // from each connection's last aim input every tick so it round-trips
+  // through the snapshot for remote players to render their facing.
+  facingAngle: number;
 }
 
 export type EnemyType = "grunt" | "brute" | "shooter" | "boss";

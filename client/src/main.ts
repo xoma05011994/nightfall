@@ -312,9 +312,12 @@ const game = new Game({
 hud.setVisible(false);
 perkTray.setVisible(false);
 
-function buildRenderState() {
+// aimAngle defaults to "down" (atan2 for {x:0,y:1}) — used before the first
+// real mouse position is known, e.g. the initial resize()-triggered render.
+function buildRenderState(aimAngle: number = Math.PI / 2) {
   return {
     player: game.player,
+    playerAimAngle: aimAngle,
     enemies: game.enemies,
     projectiles: game.projectiles,
     xpOrbs: game.xpOrbs,
@@ -380,7 +383,7 @@ function frame(now: number): void {
           snapshot.hostId,
           multiplayerGame.playerId,
         );
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
       }
     } else if (phase === "paused") {
       multiplayerLobby.hide();
@@ -389,7 +392,7 @@ function frame(now: number): void {
       hud.setVisible(true);
       if (input.consumeJustPressed("Escape")) multiplayerGame.resume();
       if (snapshot) {
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
         updateMultiplayerHud(snapshot);
       }
     } else {
@@ -411,7 +414,7 @@ function frame(now: number): void {
       }
       multiplayerGame.sendInput(dt, moveVector, aimDir, isGhost ? false : fireHeld);
       if (snapshot) {
-        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, now);
+        renderer.renderMultiplayer(snapshot, multiplayerGame.playerId, Math.atan2(aimDir.y, aimDir.x), now);
         updateMultiplayerHud(snapshot);
       }
     }
@@ -479,7 +482,7 @@ function frame(now: number): void {
     perkTray.update(game.pickedPerks);
   }
 
-  renderer.render(buildRenderState(), now);
+  renderer.render(buildRenderState(Math.atan2(aimDir.y, aimDir.x)), now);
 
   requestAnimationFrame(frame);
 }

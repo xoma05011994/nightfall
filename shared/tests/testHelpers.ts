@@ -36,6 +36,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
     goldMultiplier: 1,
     chainLinkDamagePerTick: 0,
     isGhost: false,
+    facingAngle: Math.PI / 2,
     ...overrides,
   };
 }

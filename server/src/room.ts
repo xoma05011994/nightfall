@@ -373,6 +373,10 @@ export class Room {
       if (input) {
         p.position.x += input.moveX * p.moveSpeed * dt;
         p.position.y += input.moveY * p.moveSpeed * dt;
+        // Rotate to face the last aim direction, even while a ghost (still
+        // floating and looking around) or not currently firing — mirrors
+        // how the local client always faces its own live mouse position.
+        if (Math.hypot(input.aimX, input.aimY) > 1e-6) p.facingAngle = Math.atan2(input.aimY, input.aimX);
       }
       p.position = clampToWorldBounds(p.position, p.radius);
       for (const slot of p.weaponSlots) if (slot) stepWeaponInstance(slot, WEAPON_DEFS[slot.weaponId], dt);

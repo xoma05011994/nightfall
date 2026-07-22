@@ -51,3 +51,24 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, img: HTMLImageElem
   const h = img.naturalHeight * scale;
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
 }
+
+// All source art is drawn facing "down" (toward positive Y) with no
+// rotation — atan2(dy, dx) for straight-down is +90°, so that's the
+// baseline every directional sprite (player, enemies) is drawn against.
+// Subtracting it from a desired atan2 angle gives the ctx.rotate() amount
+// that turns the art to face that direction instead.
+const SPRITE_NEUTRAL_ANGLE = Math.PI / 2;
+
+// The ctx.rotate() amount to face a given atan2(dy, dx) direction. Returns 0
+// (no rotation) for a near-zero direction vector — a caller with genuinely
+// no known facing should pass 0 length rather than guess.
+export function rotationToFace(dx: number, dy: number): number {
+  if (Math.hypot(dx, dy) < 1e-6) return 0;
+  return Math.atan2(dy, dx) - SPRITE_NEUTRAL_ANGLE;
+}
+
+// Same as rotationToFace, but from an already-known atan2 angle (e.g. a
+// remote player's broadcast Player.facingAngle) rather than a raw vector.
+export function rotationForAngle(angleRad: number): number {
+  return angleRad - SPRITE_NEUTRAL_ANGLE;
+}

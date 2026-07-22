@@ -40,5 +40,6 @@ export function createPlayer(): Player {
     goldMultiplier: 1,
     chainLinkDamagePerTick: 0,
     isGhost: false,
+    facingAngle: Math.PI / 2,
   };
 }

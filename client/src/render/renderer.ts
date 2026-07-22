@@ -1,6 +1,6 @@
 import { FENCE_POST_SPACING, REWARD_POPUP_LIFETIME_MS, REWARD_POPUP_RISE_PX, WORLD_HALF_SIZE } from "@nightfall/shared/constants";
 import { drawWeaponIcon } from "./weaponIcons";
-import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, type PlayerColor } from "./entityIcons";
+import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, rotationForAngle, rotationToFace, type PlayerColor } from "./entityIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import type { BeamEffect, Chest, ConeEffect, Enemy, LevelPalette, LightningEffect, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
@@ -39,6 +39,13 @@ export interface RenderState {
   // omits this (defaults to "blue"); co-op sets it from the local player's
   // index in the room's player list, same scheme as otherPlayers' colors.
   playerColor?: PlayerColor;
+  // atan2(dy, dx) angle the local player's sprite should face — always the
+  // live mouse-aim direction, computed fresh by the caller every frame
+  // (both solo and multiplayer read it straight from input, never from
+  // Player.facingAngle, so the local player's own rotation has zero network
+  // latency). Defaults to "down" (the sprites' neutral orientation) when
+  // omitted, e.g. an initial render before any mouse movement.
+  playerAimAngle?: number;
 }
 
 const SPLATTER_FIELD_HALF_SIZE = 4000;
@@ -148,13 +155,13 @@ export class Renderer {
     this.drawChests(state.chests, nowMs);
     this.drawWeaponPickups(state.weaponPickups, nowMs);
     this.drawOrbs(state.xpOrbs, nowMs);
-    this.drawEnemies(state.enemies, nowMs);
+    this.drawEnemies(state.enemies, state.player.position, nowMs);
     this.drawBeamEffects(state.beamEffects, nowMs);
     this.drawLightningEffects(state.lightningEffects, nowMs);
     this.drawProjectiles(state.projectiles);
     this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
-    this.drawPlayer(state.player, state.playerColor ?? "blue", nowMs);
+    this.drawPlayer(state.player, state.playerColor ?? "blue", state.playerAimAngle ?? Math.PI / 2, nowMs);
     if (state.otherPlayers) {
       for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
     }
@@ -169,7 +176,7 @@ export class Renderer {
   // the camera and reuses the same solo draw calls; the rest of the party is
   // drawn via drawRemotePlayer) and delegates to the normal render() — this
   // keeps one drawing pipeline for both solo and multiplayer.
-  renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, nowMs: number): void {
+  renderMultiplayer(snapshot: MatchSnapshot, localPlayerId: string, localAimAngle: number, nowMs: number): void {
     const localIndex = snapshot.players.findIndex((p) => p.id === localPlayerId);
     if (localIndex === -1) return;
     const local = snapshot.players[localIndex]!;
@@ -180,6 +187,7 @@ export class Renderer {
       {
         player: local.player,
         playerColor: playerColorForIndex(localIndex),
+        playerAimAngle: localAimAngle,
         enemies: snapshot.enemies,
         projectiles: snapshot.projectiles,
         enemyProjectiles: snapshot.enemyProjectiles,
@@ -199,10 +207,14 @@ export class Renderer {
   private drawRemotePlayer(snapshot: RemotePlayerRenderInfo, nowMs: number): void {
     const ctx = this.ctx;
     const player = snapshot.player;
+    // Remote players' facing comes from the server's broadcast
+    // Player.facingAngle (their last aim input), not a live cursor we don't
+    // have access to.
+    const rotation = rotationForAngle(player.facingAngle);
     if (player.isGhost) {
-      this.drawGhost(player, snapshot.color, nowMs);
+      this.drawGhost(player, snapshot.color, rotation, nowMs);
     } else {
-      this.drawCharacterSprite(player, snapshot.color, nowMs);
+      this.drawCharacterSprite(player, snapshot.color, rotation, nowMs);
     }
 
     ctx.save();
@@ -216,13 +228,16 @@ export class Renderer {
 
   // The knight sprite for a living player — a colored glow behind it keeps
   // party members readable at a glance even before you notice the outfit
-  // color (mirrors the old plain-circle glow this replaced).
-  private drawCharacterSprite(player: Player, color: PlayerColor, nowMs: number): void {
+  // color (mirrors the old plain-circle glow this replaced). `rotation` is
+  // a ctx.rotate() amount (see entityIcons.rotationToFace/rotationForAngle),
+  // not a raw facing angle.
+  private drawCharacterSprite(player: Player, color: PlayerColor, rotation: number, nowMs: number): void {
     const ctx = this.ctx;
     const pulse = 1 + Math.sin(nowMs / 260) * 0.03;
     const glow = color === "blue" ? "#4ee2ff" : color === "gold" ? "#ffcf4a" : color === "green" ? "#6fe86f" : "#ff5a5a";
     ctx.save();
     ctx.translate(player.position.x, player.position.y);
+    ctx.rotate(rotation);
     ctx.shadowColor = glow;
     ctx.shadowBlur = 14;
     drawEntityIcon(ctx, getCharacterImage(color), PLAYER_ICON_SIZE * pulse);
@@ -232,11 +247,12 @@ export class Renderer {
   // A downed player: the same knight sprite, desaturated and blue-shifted
   // via canvas filters, translucent and gently pulsing — clearly "not
   // really here" versus a living party member's solid, glowing sprite.
-  private drawGhost(player: Player, color: PlayerColor, nowMs: number): void {
+  private drawGhost(player: Player, color: PlayerColor, rotation: number, nowMs: number): void {
     const ctx = this.ctx;
     const pulse = 1 + Math.sin(nowMs / 400) * 0.08;
     ctx.save();
     ctx.translate(player.position.x, player.position.y);
+    ctx.rotate(rotation);
     ctx.globalAlpha = 0.5;
     ctx.filter = "grayscale(70%) brightness(1.5) saturate(1.6) hue-rotate(160deg)";
     ctx.shadowColor = "#bcd4ff";
@@ -299,15 +315,18 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(player: Player, color: PlayerColor, nowMs: number): void {
+  // aimAngle is the live atan2(dy, dx) from the local mouse position — see
+  // RenderState.playerAimAngle.
+  private drawPlayer(player: Player, color: PlayerColor, aimAngle: number, nowMs: number): void {
+    const rotation = rotationForAngle(aimAngle);
     if (player.isGhost) {
-      this.drawGhost(player, color, nowMs);
+      this.drawGhost(player, color, rotation, nowMs);
       return;
     }
-    this.drawCharacterSprite(player, color, nowMs);
+    this.drawCharacterSprite(player, color, rotation, nowMs);
   }
 
-  private drawEnemies(enemies: Enemy[], nowMs: number): void {
+  private drawEnemies(enemies: Enemy[], target: Vec2, nowMs: number): void {
     const ctx = this.ctx;
     for (const enemy of enemies) {
       ctx.save();
@@ -317,6 +336,9 @@ export class Renderer {
       // cyan shooter, green brute), same palette as before.
       const glowColor = enemy.isBoss ? "#a020f0" : enemy.type === "shooter" ? "#4ee2ff" : isBrute ? "#4fd94f" : "#c81e1e";
       ctx.translate(enemy.position.x, enemy.position.y);
+      // Faces the local player — reads as "coming right at you" regardless
+      // of which party member the AI is actually pathing toward.
+      ctx.rotate(rotationToFace(target.x - enemy.position.x, target.y - enemy.position.y));
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = enemy.isBoss ? 20 : isBrute ? 12 : 10;
       drawEntityIcon(ctx, getEnemyImage(enemy.type), ENEMY_ICON_SIZES[enemy.type]);
