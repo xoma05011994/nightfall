@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { IGNITE_TICK_MS } from "../src/constants";
-import { applyLifeSteal, applyOnHitEffects, shurikenAngle, stepAura, stepBurningEnemies, stepShurikens } from "../src/systems/statusEffects";
+import { IGNITE_TICK_MS, METEOR_STRIKE_RANGE, METEOR_TICK_MS, SHIELD_REGEN_DELAY_MS, SHIELD_REGEN_PER_SEC, THUNDER_RANGE, THUNDER_TICK_MS } from "../src/constants";
+import {
+  absorbShieldDamage,
+  applyLifeSteal,
+  applyOnHitEffects,
+  shurikenAngle,
+  stepAura,
+  stepBurningEnemies,
+  stepMeteorStrike,
+  stepShieldRegen,
+  stepShurikens,
+  stepThunder,
+} from "../src/systems/statusEffects";
 import { SHURIKEN_ORBIT_RADIUS, SHURIKEN_TICK_MS } from "../src/constants";
+import type { MeteorEffect } from "../src/types";
 import { makeEnemy, makePlayer } from "./testHelpers";
+
+// Fixed-sequence stand-in for () => number so meteor/thunder tests are
+// deterministic instead of depending on Math.random.
+function fixedRng(...values: number[]): () => number {
+  let i = 0;
+  return () => values[i++ % values.length]!;
+}
 
 describe("applyLifeSteal", () => {
   it("does nothing when the player has no life steal", () => {
@@ -328,5 +347,133 @@ describe("applyOnHitEffects — Tempest (chainAlwaysIgnites)", () => {
     const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
     applyOnHitEffects(player, [hit, target], hit, [], 0);
     expect(target.burnDamagePerTick).toBe(0);
+  });
+});
+
+describe("stepMeteorStrike", () => {
+  it("does nothing when the player has no meteors (meteorCount 0)", () => {
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, meteorCount: 0, meteorDamage: 30 });
+    stepMeteorStrike(player, [enemy], 1, 0, fixedRng(0, 1), []);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("strikes an impact point, damaging enemies within blast radius and pushing one MeteorEffect", () => {
+    // rng sequence (0, 1) picks angle=0, dist=METEOR_STRIKE_RANGE, landing the
+    // single meteor exactly at (METEOR_STRIKE_RANGE, 0) relative to the player.
+    const player = makePlayer({ position: { x: 0, y: 0 }, meteorCount: 1, meteorDamage: 30, meteorTickTimerMs: 0 });
+    const enemy = makeEnemy({ position: { x: METEOR_STRIKE_RANGE, y: 0 }, hp: 100 });
+    const effects: MeteorEffect[] = [];
+    stepMeteorStrike(player, [enemy], 0.001, 1000, fixedRng(0, 1), effects);
+    expect(enemy.hp).toBe(70);
+    expect(effects).toHaveLength(1);
+    expect(effects[0]!.position.x).toBeCloseTo(METEOR_STRIKE_RANGE, 5);
+    expect(effects[0]!.expiresAtMs).toBeGreaterThan(1000);
+  });
+
+  it("does not damage an enemy outside every meteor's blast radius", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, meteorCount: 1, meteorDamage: 30, meteorTickTimerMs: 0 });
+    const enemy = makeEnemy({ position: { x: METEOR_STRIKE_RANGE + 1000, y: 0 }, hp: 100 });
+    stepMeteorStrike(player, [enemy], 0.001, 0, fixedRng(0, 1), []);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("fires meteorCount independent meteors, one MeteorEffect each", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, meteorCount: 2, meteorDamage: 10, meteorTickTimerMs: 0 });
+    const effects: MeteorEffect[] = [];
+    stepMeteorStrike(player, [], 0.001, 0, fixedRng(0, 1), effects);
+    expect(effects).toHaveLength(2);
+  });
+
+  it("respects its own tick timer independent of dt", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, meteorCount: 1, meteorDamage: 30, meteorTickTimerMs: METEOR_TICK_MS });
+    const enemy = makeEnemy({ position: { x: METEOR_STRIKE_RANGE, y: 0 }, hp: 100 });
+    stepMeteorStrike(player, [enemy], 0.001, 0, fixedRng(0, 1), []); // timer still well above 0
+    expect(enemy.hp).toBe(100);
+  });
+});
+
+describe("stepThunder", () => {
+  it("does nothing when the player has no thunder (thunderDamage 0)", () => {
+    const enemy = makeEnemy({ position: { x: 100, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, thunderDamage: 0 });
+    stepThunder(player, [enemy], 1, 0, fixedRng(0), []);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("strikes a random in-range enemy and pushes a lightning effect", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, thunderDamage: 15, thunderTickTimerMs: 0 });
+    const enemy = makeEnemy({ id: 7, position: { x: 100, y: 0 }, hp: 100 });
+    const effects: import("../src/types").LightningEffect[] = [];
+    stepThunder(player, [enemy], 0.001, 1000, fixedRng(0), effects);
+    expect(enemy.hp).toBe(85);
+    expect(effects).toHaveLength(1);
+    expect(effects[0]!.expiresAtMs).toBeGreaterThan(1000);
+  });
+
+  it("does not strike an enemy outside THUNDER_RANGE", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, thunderDamage: 15, thunderTickTimerMs: 0 });
+    const enemy = makeEnemy({ position: { x: THUNDER_RANGE + 1000, y: 0 }, hp: 100 });
+    stepThunder(player, [enemy], 0.001, 0, fixedRng(0), []);
+    expect(enemy.hp).toBe(100);
+  });
+
+  it("respects its own tick timer independent of dt", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, thunderDamage: 15, thunderTickTimerMs: THUNDER_TICK_MS });
+    const enemy = makeEnemy({ position: { x: 100, y: 0 }, hp: 100 });
+    stepThunder(player, [enemy], 0.001, 0, fixedRng(0), []); // timer still well above 0
+    expect(enemy.hp).toBe(100);
+  });
+});
+
+describe("absorbShieldDamage", () => {
+  it("passes damage through unchanged when there's no shield", () => {
+    const player = makePlayer({ shieldMax: 0, shieldCurrent: 0 });
+    expect(absorbShieldDamage(player, 20)).toBe(20);
+  });
+
+  it("fully absorbs damage when the shield has enough charge", () => {
+    const player = makePlayer({ shieldMax: 50, shieldCurrent: 50 });
+    expect(absorbShieldDamage(player, 20)).toBe(0);
+    expect(player.shieldCurrent).toBe(30);
+  });
+
+  it("absorbs partially and returns the leftover once the shield is depleted", () => {
+    const player = makePlayer({ shieldMax: 50, shieldCurrent: 15 });
+    expect(absorbShieldDamage(player, 40)).toBe(25);
+    expect(player.shieldCurrent).toBe(0);
+  });
+
+  it("resets the regen delay timer whenever it actually absorbs damage", () => {
+    const player = makePlayer({ shieldMax: 50, shieldCurrent: 50, shieldRegenTimerMs: 0 });
+    absorbShieldDamage(player, 10);
+    expect(player.shieldRegenTimerMs).toBe(SHIELD_REGEN_DELAY_MS);
+  });
+});
+
+describe("stepShieldRegen", () => {
+  it("does nothing until the Shield perk is picked (shieldMax 0)", () => {
+    const player = makePlayer({ shieldMax: 0, shieldCurrent: 0, shieldRegenTimerMs: 0 });
+    stepShieldRegen(player, 1);
+    expect(player.shieldCurrent).toBe(0);
+  });
+
+  it("counts down the regen delay without regenerating while it's still active", () => {
+    const player = makePlayer({ shieldMax: 40, shieldCurrent: 10, shieldRegenTimerMs: 1000 });
+    stepShieldRegen(player, 0.1);
+    expect(player.shieldRegenTimerMs).toBeCloseTo(900, 5);
+    expect(player.shieldCurrent).toBe(10);
+  });
+
+  it("regenerates at SHIELD_REGEN_PER_SEC once the delay has elapsed", () => {
+    const player = makePlayer({ shieldMax: 40, shieldCurrent: 10, shieldRegenTimerMs: 0 });
+    stepShieldRegen(player, 1);
+    expect(player.shieldCurrent).toBeCloseTo(10 + SHIELD_REGEN_PER_SEC, 5);
+  });
+
+  it("never regenerates past shieldMax", () => {
+    const player = makePlayer({ shieldMax: 40, shieldCurrent: 39, shieldRegenTimerMs: 0 });
+    stepShieldRegen(player, 1);
+    expect(player.shieldCurrent).toBe(40);
   });
 });

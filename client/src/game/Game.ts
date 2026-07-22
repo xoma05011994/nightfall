@@ -15,7 +15,7 @@ import { mulberry32, normalize } from "@nightfall/shared/math";
 import { createBoss, createEnemy, currentSpawnIntervalMs, pickEnemyType, spawnPositionAround } from "@nightfall/shared/systems/spawner";
 import { resolveEnemyContactDamage, resolveEnemyProjectileHits, resolveProjectileHits, stepEnemies, stepEnemyProjectiles, stepProjectiles } from "@nightfall/shared/systems/combat";
 import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
-import { stepAura, stepBurningEnemies, stepShurikens } from "@nightfall/shared/systems/statusEffects";
+import { stepAura, stepBurningEnemies, stepMeteorStrike, stepShieldRegen, stepShurikens, stepThunder } from "@nightfall/shared/systems/statusEffects";
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { weaponDamageMultiplier } from "@nightfall/shared/systems/profile";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs } from "@nightfall/shared/systems/xp";
@@ -36,6 +36,7 @@ import type {
   LevelDef,
   DamagePopupEffect,
   LightningEffect,
+  MeteorEffect,
   Obstacle,
   Perk,
   Player,
@@ -70,6 +71,7 @@ export class Game {
   beamEffects: BeamEffect[] = [];
   coneEffects: ConeEffect[] = [];
   lightningEffects: LightningEffect[] = [];
+  meteorEffects: MeteorEffect[] = [];
   rewardPopups: RewardPopupEffect[] = [];
   damagePopups: DamagePopupEffect[] = [];
   elapsedMs = 0;
@@ -135,6 +137,7 @@ export class Game {
     this.beamEffects = [];
     this.coneEffects = [];
     this.lightningEffects = [];
+    this.meteorEffects = [];
     this.rewardPopups = [];
     this.damagePopups = [];
     this.elapsedMs = 0;
@@ -226,6 +229,7 @@ export class Game {
     this.beamEffects = this.beamEffects.filter((b) => b.expiresAtMs > nowMs);
     this.coneEffects = this.coneEffects.filter((c) => c.expiresAtMs > nowMs);
     this.lightningEffects = this.lightningEffects.filter((l) => l.expiresAtMs > nowMs);
+    this.meteorEffects = this.meteorEffects.filter((m) => m.expiresAtMs > nowMs);
     this.rewardPopups = this.rewardPopups.filter((p) => p.expiresAtMs > nowMs);
 
     this.projectiles = stepProjectiles(this.projectiles, dt);
@@ -247,6 +251,11 @@ export class Game {
     if (this.phase !== "playing") return;
     this.handleDeadEnemies(stepShurikens(this.player, this.enemies, dt, nowMs));
     if (this.phase !== "playing") return;
+    this.handleDeadEnemies(stepMeteorStrike(this.player, this.enemies, dt, nowMs, this.rng, this.meteorEffects));
+    if (this.phase !== "playing") return;
+    this.handleDeadEnemies(stepThunder(this.player, this.enemies, dt, nowMs, this.rng, this.lightningEffects));
+    if (this.phase !== "playing") return;
+    stepShieldRegen(this.player, dt);
 
     const { survivingOrbs, xpCollected } = stepXpOrbs(this.xpOrbs, this.player, dt);
     this.xpOrbs = survivingOrbs;

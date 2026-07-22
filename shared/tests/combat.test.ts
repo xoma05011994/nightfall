@@ -246,6 +246,14 @@ describe("stepEnemyProjectiles / resolveEnemyProjectileHits", () => {
     expect(surviving).toHaveLength(1);
     expect(player.hp).toBe(100);
   });
+
+  it("the Shield perk absorbs enemy projectile damage before hp", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, hp: 100, shieldMax: 5, shieldCurrent: 5 });
+    const projectiles: Projectile[] = [{ id: 1, position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, damage: 10, radius: 5, ttlMs: 1000, color: "#b23fff" }];
+    resolveEnemyProjectileHits(projectiles, player);
+    expect(player.shieldCurrent).toBe(0);
+    expect(player.hp).toBe(95); // 5 absorbed, 5 leftover onto hp
+  });
 });
 
 describe("resolveEnemyContactDamage", () => {
@@ -282,5 +290,14 @@ describe("resolveEnemyContactDamage", () => {
     expect(dealt).toBe(8);
     expect(near.hp).toBe(92);
     expect(far.hp).toBe(100);
+  });
+
+  it("the Shield perk absorbs contact damage before hp, and the returned total reflects that", () => {
+    const player = makePlayer({ position: { x: 0, y: 0 }, hp: 100, shieldMax: 40, shieldCurrent: 40 });
+    const enemy = makeEnemy({ position: { x: 0, y: 0 }, damage: 8, contactTimerMs: 0 });
+    const dealt = resolveEnemyContactDamage([enemy], player);
+    expect(dealt).toBe(0);
+    expect(player.hp).toBe(100);
+    expect(player.shieldCurrent).toBe(32);
   });
 });

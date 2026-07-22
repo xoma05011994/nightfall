@@ -351,6 +351,7 @@ function buildRenderState(aimAngle: number = Math.PI / 2) {
     beamEffects: game.beamEffects,
     coneEffects: game.coneEffects,
     lightningEffects: game.lightningEffects,
+    meteorEffects: game.meteorEffects,
     enemyProjectiles: game.enemyProjectiles,
     rewardPopups: game.rewardPopups,
     damagePopups: game.damagePopups,

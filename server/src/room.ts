@@ -24,7 +24,7 @@ import {
   stepProjectiles,
 } from "@nightfall/shared/systems/combat";
 import { collectDeadEnemies } from "@nightfall/shared/systems/enemies";
-import { stepAura, stepBurningEnemies, stepShurikens } from "@nightfall/shared/systems/statusEffects";
+import { stepAura, stepBurningEnemies, stepMeteorStrike, stepShieldRegen, stepShurikens, stepThunder } from "@nightfall/shared/systems/statusEffects";
 import { stepChainLink } from "@nightfall/shared/systems/chainLink";
 import { findTouchedChest, rollChestReward, spawnChest } from "@nightfall/shared/systems/chests";
 import { grantXp, spawnXpOrbForEnemy, stepXpOrbs, xpToNextForLevel, type XpProgress } from "@nightfall/shared/systems/xp";
@@ -41,6 +41,7 @@ import type {
   DamagePopupEffect,
   Enemy,
   LightningEffect,
+  MeteorEffect,
   Obstacle,
   Perk,
   Player,
@@ -104,6 +105,7 @@ export class Room {
   private beamEffects: BeamEffect[] = [];
   private coneEffects: ConeEffect[] = [];
   private lightningEffects: LightningEffect[] = [];
+  private meteorEffects: MeteorEffect[] = [];
   private rewardPopups: RewardPopupEffect[] = [];
   private damagePopups: DamagePopupEffect[] = [];
 
@@ -456,6 +458,7 @@ export class Room {
     this.beamEffects = this.beamEffects.filter((b) => b.expiresAtMs > nowMs);
     this.coneEffects = this.coneEffects.filter((cn) => cn.expiresAtMs > nowMs);
     this.lightningEffects = this.lightningEffects.filter((l) => l.expiresAtMs > nowMs);
+    this.meteorEffects = this.meteorEffects.filter((m) => m.expiresAtMs > nowMs);
     this.rewardPopups = this.rewardPopups.filter((r) => r.expiresAtMs > nowMs);
 
     // 3. Step + resolve player projectiles. Partitioned by ownerId so each
@@ -521,6 +524,9 @@ export class Room {
       this.handleDeadEnemies(stepBurningEnemies(rec.player, this.enemies, dt), rec);
       this.handleDeadEnemies(stepAura(rec.player, this.enemies, dt, this.lightningEffects, nowMs), rec);
       this.handleDeadEnemies(stepShurikens(rec.player, this.enemies, dt, nowMs), rec);
+      this.handleDeadEnemies(stepMeteorStrike(rec.player, this.enemies, dt, nowMs, this.rng, this.meteorEffects), rec);
+      this.handleDeadEnemies(stepThunder(rec.player, this.enemies, dt, nowMs, this.rng, this.lightningEffects), rec);
+      stepShieldRegen(rec.player, dt);
     }
 
     // 5b. Chain Link (multiplayer-only) — party-wide, not per-player: one
@@ -605,6 +611,7 @@ export class Room {
       beamEffects: this.beamEffects,
       coneEffects: this.coneEffects,
       lightningEffects: this.lightningEffects,
+      meteorEffects: this.meteorEffects,
       rewardPopups: this.rewardPopups,
       damagePopups: this.damagePopups,
     };

@@ -1,6 +1,21 @@
-import { AURA_TICK_MS, IGNITE_TICK_MS, SHURIKEN_HIT_RADIUS, SHURIKEN_ORBIT_RADIUS, SHURIKEN_ORBIT_SPEED, SHURIKEN_TICK_MS } from "../constants";
+import {
+  AURA_TICK_MS,
+  IGNITE_TICK_MS,
+  METEOR_EFFECT_LIFETIME_MS,
+  METEOR_RADIUS,
+  METEOR_STRIKE_RANGE,
+  METEOR_TICK_MS,
+  SHIELD_REGEN_DELAY_MS,
+  SHIELD_REGEN_PER_SEC,
+  SHURIKEN_HIT_RADIUS,
+  SHURIKEN_ORBIT_RADIUS,
+  SHURIKEN_ORBIT_SPEED,
+  SHURIKEN_TICK_MS,
+  THUNDER_RANGE,
+  THUNDER_TICK_MS,
+} from "../constants";
 import { distanceSq } from "../math";
-import type { Enemy, LightningEffect, Player } from "../types";
+import type { Enemy, LightningEffect, MeteorEffect, Player } from "../types";
 import { circlesOverlap } from "./collision";
 import { collectDeadEnemies } from "./enemies";
 
@@ -165,6 +180,91 @@ export function stepAura(player: Player, enemies: Enemy[], dt: number, lightning
   }
 
   return collectDeadEnemies(enemies);
+}
+
+// Meteor Strike perk — every METEOR_TICK_MS, meteorCount meteors land at
+// independently-random points within METEOR_STRIKE_RANGE of the player,
+// each dealing meteorDamage to every enemy within METEOR_RADIUS of its
+// impact point. Rank grows meteorCount (more meteors per volley) rather
+// than the blast radius, so repeat picks read as "more falling" instead of
+// a bigger single blast. Pushes one MeteorEffect per meteor for the
+// renderer's expanding-shockwave visual (see renderer.ts's
+// drawMeteorEffects) — purely cosmetic, the damage is applied immediately.
+export function stepMeteorStrike(player: Player, enemies: Enemy[], dt: number, nowMs: number, rng: () => number, meteorEffects: MeteorEffect[]): Enemy[] {
+  if (player.meteorCount <= 0) return [];
+  player.meteorTickTimerMs -= dt * 1000;
+  if (player.meteorTickTimerMs > 0) return [];
+  player.meteorTickTimerMs += METEOR_TICK_MS;
+
+  for (let i = 0; i < player.meteorCount; i++) {
+    const angle = rng() * Math.PI * 2;
+    const dist = rng() * METEOR_STRIKE_RANGE;
+    const point = { x: player.position.x + Math.cos(angle) * dist, y: player.position.y + Math.sin(angle) * dist };
+    meteorEffects.push({ position: point, radius: METEOR_RADIUS, expiresAtMs: nowMs + METEOR_EFFECT_LIFETIME_MS });
+    const radiusSq = METEOR_RADIUS * METEOR_RADIUS;
+    for (const enemy of enemies) {
+      if (enemy.hp <= 0) continue;
+      if (distanceSq(point, enemy.position) <= radiusSq) {
+        enemy.hp -= player.meteorDamage;
+        applyLifeSteal(player, player.meteorDamage);
+      }
+    }
+  }
+
+  return collectDeadEnemies(enemies);
+}
+
+// Thunder perk — every THUNDER_TICK_MS, strikes one random living enemy
+// within THUNDER_RANGE of the player for thunderDamage, reusing the same
+// LightningEffect visual as Chain Lightning but firing on its own timer
+// rather than on a weapon hit — an independent, always-on damage source
+// rather than something that needs a successful shot to trigger.
+export function stepThunder(player: Player, enemies: Enemy[], dt: number, nowMs: number, rng: () => number, lightningEffects: LightningEffect[]): Enemy[] {
+  if (player.thunderDamage <= 0) return [];
+  player.thunderTickTimerMs -= dt * 1000;
+  if (player.thunderTickTimerMs > 0) return [];
+  player.thunderTickTimerMs += THUNDER_TICK_MS;
+
+  const rangeSq = THUNDER_RANGE * THUNDER_RANGE;
+  const inRange = enemies.filter((e) => e.hp > 0 && distanceSq(player.position, e.position) <= rangeSq);
+  if (inRange.length === 0) return [];
+
+  const target = inRange[Math.floor(rng() * inRange.length)]!;
+  target.hp -= player.thunderDamage;
+  applyLifeSteal(player, player.thunderDamage);
+  lightningEffects.push({ from: { ...player.position }, to: { ...target.position }, expiresAtMs: nowMs + LIGHTNING_EFFECT_LIFETIME_MS, seed: target.id });
+
+  return collectDeadEnemies(enemies);
+}
+
+// Shield (Barrier) perk — absorbs incoming damage from any source before it
+// touches hp. Returns the leftover damage that should still be applied to
+// hp (0 if the shield fully absorbed it). No-ops (returns rawDamage
+// unchanged) until shieldCurrent > 0, so it's safe to call unconditionally
+// at every player-damage site. Resets the regen delay any time it actually
+// absorbs something.
+export function absorbShieldDamage(player: Player, rawDamage: number): number {
+  if (rawDamage <= 0 || player.shieldCurrent <= 0) return rawDamage;
+  player.shieldRegenTimerMs = SHIELD_REGEN_DELAY_MS;
+  if (rawDamage <= player.shieldCurrent) {
+    player.shieldCurrent -= rawDamage;
+    return 0;
+  }
+  const leftover = rawDamage - player.shieldCurrent;
+  player.shieldCurrent = 0;
+  return leftover;
+}
+
+// Regenerates the shield back toward shieldMax once SHIELD_REGEN_DELAY_MS
+// has passed since it last absorbed a hit. No-ops until the perk is picked
+// (shieldMax > 0) or once it's already full.
+export function stepShieldRegen(player: Player, dt: number): void {
+  if (player.shieldMax <= 0 || player.shieldCurrent >= player.shieldMax) return;
+  if (player.shieldRegenTimerMs > 0) {
+    player.shieldRegenTimerMs -= dt * 1000;
+    return;
+  }
+  player.shieldCurrent = Math.min(player.shieldMax, player.shieldCurrent + SHIELD_REGEN_PER_SEC * dt);
 }
 
 // The i-th of `count` shurikens' current orbit position angle — a pure

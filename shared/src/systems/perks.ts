@@ -248,6 +248,35 @@ export const PERKS: Perk[] = [
     },
   },
   {
+    id: "meteor",
+    name: "Meteor Strike",
+    description: "Meteors periodically fall near you for AoE damage — each rank rains down one more",
+    icon: '<circle cx="15" cy="9" r="5" fill="currentColor"/><line x1="14" y1="10" x2="5" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="13" x2="10" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>',
+    apply: (p, rank) => {
+      p.meteorCount = rank;
+      p.meteorDamage += 25;
+    },
+  },
+  {
+    id: "shield",
+    name: "Barrier",
+    description: "A shield absorbs incoming damage before your HP, recharging a few seconds after you stop taking hits",
+    icon: '<polygon points="12,2 20,6 20,13 12,22 4,13 4,6" fill="currentColor" opacity="0.35"/><polygon points="12,2 20,6 20,13 12,22 4,13 4,6" fill="none" stroke="currentColor" stroke-width="2"/>',
+    apply: (p) => {
+      p.shieldMax += 40;
+      p.shieldCurrent += 40;
+    },
+  },
+  {
+    id: "thunder",
+    name: "Thunder",
+    description: "Random lightning strikes a nearby enemy on its own timer — independent of Chain Lightning",
+    icon: '<polygon points="13,2 4,14 11,14 9,22 20,10 13,10" fill="currentColor" opacity="0.6"/><polygon points="9,2 2,12 7,12 5,20 14,8 9,8" fill="currentColor"/>',
+    apply: (p) => {
+      p.thunderDamage += 12;
+    },
+  },
+  {
     id: "revive",
     name: "Revive",
     description: "Bring all downed teammates back to life — multiplayer only, offered only while someone's down",

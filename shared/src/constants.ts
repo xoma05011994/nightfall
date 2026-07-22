@@ -206,6 +206,28 @@ export function isValidRoomCode(code: string): boolean {
   return true;
 }
 
+// v1.03 — Meteor Strike: periodic AoE strikes landing at random points near
+// the player, same "tick timer, not continuous" pattern as Aura/Shurikens.
+// Rank grows how many meteors fall each tick (a visual/mechanical escalation)
+// alongside a flat damage increase (see systems/perks.ts).
+export const METEOR_TICK_MS = 1400;
+export const METEOR_STRIKE_RANGE = 260; // max distance from the player a meteor can land
+export const METEOR_RADIUS = 70; // blast radius at the impact point
+export const METEOR_EFFECT_LIFETIME_MS = 400;
+
+// v1.03 — Shield (Barrier perk): absorbs incoming damage from any source
+// before it touches hp, then recharges after a few seconds without taking a
+// hit. Regen is gradual (per-second), not an instant refill, so emptying it
+// still means a real vulnerable window.
+export const SHIELD_REGEN_DELAY_MS = 5000;
+export const SHIELD_REGEN_PER_SEC = 8;
+
+// v1.03 — Thunder: random lightning strikes a nearby enemy on a fixed tick,
+// independent of (and stacking with) Chain Lightning's on-hit chain. Reuses
+// the same LightningEffect visual/plumbing as Chain Lightning.
+export const THUNDER_TICK_MS = 1000;
+export const THUNDER_RANGE = 400;
+
 export const MATCH_TICK_HZ = 20;
 export const MATCH_TICK_MS = 1000 / MATCH_TICK_HZ;
 // Client sends setInput at this rate (also 20Hz — one input per tick).

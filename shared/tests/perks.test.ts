@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 23 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(23);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(23);
+  it("has exactly 26 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(26);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(26);
   });
 
   it("every perk has a non-empty icon", () => {

@@ -114,6 +114,25 @@ export interface Player {
   // Lightning jump also ignites its target, using Ignite's own numbers if
   // picked or a modest baseline if not.
   chainAlwaysIgnites: boolean;
+  // Meteor Strike perk — periodic AoE strikes at random points near the
+  // player (see constants.ts's METEOR_* and systems/statusEffects.ts's
+  // stepMeteorStrike). meteorCount is the perk's rank (how many meteors
+  // fall per tick); both are 0 until picked.
+  meteorCount: number;
+  meteorDamage: number;
+  meteorTickTimerMs: number;
+  // Shield (Barrier) perk — absorbs incoming damage from any source before
+  // hp (see systems/statusEffects.ts's absorbShieldDamage/stepShieldRegen).
+  // shieldRegenTimerMs counts down after the shield last absorbed a hit;
+  // regen only resumes once it reaches 0. All 0 until picked.
+  shieldMax: number;
+  shieldCurrent: number;
+  shieldRegenTimerMs: number;
+  // Thunder perk — random lightning strikes a nearby enemy on a fixed tick,
+  // independent of Chain Lightning (see systems/statusEffects.ts's
+  // stepThunder). 0 until picked.
+  thunderDamage: number;
+  thunderTickTimerMs: number;
   // Multiplayer only — set when hp hits 0 in co-op. A ghost can still float
   // around to spectate but is excluded from all combat (can't fire, isn't
   // targeted, takes no damage, collects nothing) until a teammate picks the
@@ -254,6 +273,16 @@ export interface DamagePopupEffect {
   position: Vec2;
   amount: number;
   startMs: number;
+  expiresAtMs: number;
+}
+
+// Meteor Strike perk proc — a transient impact/blast marker at the strike
+// point, drawn as an expanding, fading shockwave (see renderer.ts's
+// drawMeteorEffects). Purely cosmetic — the damage itself is applied the
+// instant this is pushed (systems/statusEffects.ts's stepMeteorStrike).
+export interface MeteorEffect {
+  position: Vec2;
+  radius: number;
   expiresAtMs: number;
 }
 

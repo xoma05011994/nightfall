@@ -1,4 +1,4 @@
-import type { BeamEffect, Chest, ConeEffect, DamagePopupEffect, Enemy, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, WeaponPickup, XpOrb } from "./types";
+import type { BeamEffect, Chest, ConeEffect, DamagePopupEffect, Enemy, LightningEffect, MeteorEffect, Obstacle, Player, Projectile, RewardPopupEffect, WeaponPickup, XpOrb } from "./types";
 
 // Sent from client to server at INPUT_SEND_HZ.
 export interface PlayerInputDTO {
@@ -50,6 +50,7 @@ export interface MatchSnapshot {
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
   lightningEffects: LightningEffect[];
+  meteorEffects: MeteorEffect[];
   rewardPopups: RewardPopupEffect[];
   damagePopups: DamagePopupEffect[];
 }

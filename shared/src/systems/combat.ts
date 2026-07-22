@@ -11,7 +11,7 @@ import { directionTo, distance } from "../math";
 import type { Enemy, LightningEffect, Player, Projectile, Vec2 } from "../types";
 import { circlesOverlap } from "./collision";
 import { collectDeadEnemies } from "./enemies";
-import { applyLifeSteal, applyOnHitEffects } from "./statusEffects";
+import { absorbShieldDamage, applyLifeSteal, applyOnHitEffects } from "./statusEffects";
 
 export function stepProjectiles(projectiles: Projectile[], dt: number): Projectile[] {
   const alive: Projectile[] = [];
@@ -158,7 +158,7 @@ export function resolveEnemyProjectileHits(projectiles: Projectile[], player: Pl
   for (const p of projectiles) {
     const hit = players.find((pl) => circlesOverlap(p.position, p.radius, pl.position, pl.radius));
     if (hit) {
-      hit.hp -= p.damage;
+      hit.hp -= absorbShieldDamage(hit, p.damage);
       continue;
     }
     surviving.push(p);
@@ -166,10 +166,10 @@ export function resolveEnemyProjectileHits(projectiles: Projectile[], player: Pl
   return surviving;
 }
 
-// Returns total damage dealt across all players this step (each enemy can
-// only land a hit once per its own contact cooldown, not globally, and only
-// ever damages the first player it's found overlapping). Accepts one player
-// (solo) or several (co-op).
+// Returns total hp damage dealt across all players this step, after the
+// Shield perk's absorption (each enemy can only land a hit once per its own
+// contact cooldown, not globally, and only ever damages the first player
+// it's found overlapping). Accepts one player (solo) or several (co-op).
 export function resolveEnemyContactDamage(enemies: Enemy[], player: Player | Player[]): number {
   const players = Array.isArray(player) ? player : [player];
   let totalDamage = 0;
@@ -177,8 +177,9 @@ export function resolveEnemyContactDamage(enemies: Enemy[], player: Player | Pla
     if (enemy.contactTimerMs > 0) continue;
     const hit = players.find((pl) => circlesOverlap(enemy.position, enemy.radius, pl.position, pl.radius));
     if (hit) {
-      hit.hp -= enemy.damage;
-      totalDamage += enemy.damage;
+      const dealt = absorbShieldDamage(hit, enemy.damage);
+      hit.hp -= dealt;
+      totalDamage += dealt;
       enemy.contactTimerMs = enemy.contactCooldownMs;
     }
   }

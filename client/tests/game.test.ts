@@ -313,11 +313,11 @@ describe("Game — weapon upgrades from the meta-progression shop", () => {
     expect(game.projectiles[0]!.damage).toBeCloseTo(WEAPON_DEFS.pistol.damage * 1.2, 5);
   });
 
-  it("does not apply weapon upgrades in endless mode even if passed in", () => {
+  it("applies weapon upgrades in endless mode too — v1.0 made coins/upgrades account-wide across every solo mode", () => {
     const { game } = makeGame(1, "endless");
-    game.start("endless", null, { pistol: 5 });
+    game.start("endless", null, { pistol: 5 }); // +50% damage
     game.update(0.016, { x: 0, y: 0 }, { x: 1, y: 0 }, true, 0);
-    expect(game.projectiles[0]!.damage).toBeCloseTo(WEAPON_DEFS.pistol.damage, 5);
+    expect(game.projectiles[0]!.damage).toBeCloseTo(WEAPON_DEFS.pistol.damage * 1.5, 5);
   });
 
   it("stacks with perk damageMultiplier rather than replacing it", () => {

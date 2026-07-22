@@ -3,7 +3,7 @@ import { drawWeaponIcon } from "./weaponIcons";
 import { drawEntityIcon, getCharacterImage, getChestImage, getEnemyImage, playerColorForIndex, rotationForAngle, rotationToFace, type PlayerColor } from "./entityIcons";
 import { WEAPON_DEFS } from "@nightfall/shared/systems/weapons";
 import { shurikenAngle } from "@nightfall/shared/systems/statusEffects";
-import type { BeamEffect, Chest, ConeEffect, DamagePopupEffect, Enemy, LevelPalette, LightningEffect, Obstacle, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
+import type { BeamEffect, Chest, ConeEffect, DamagePopupEffect, Enemy, LevelPalette, LightningEffect, MeteorEffect, Obstacle, Player, Projectile, RewardPopupEffect, Vec2, WeaponPickup, XpOrb } from "@nightfall/shared/types";
 import type { MatchSnapshot, PlayerSnapshot } from "@nightfall/shared/multiplayer";
 
 // A co-op teammate to render, with the color assigned by their index in the
@@ -33,6 +33,7 @@ export interface RenderState {
   beamEffects: BeamEffect[];
   coneEffects: ConeEffect[];
   lightningEffects: LightningEffect[];
+  meteorEffects: MeteorEffect[];
   rewardPopups: RewardPopupEffect[];
   damagePopups: DamagePopupEffect[];
   // Purely a draw-time toggle (systems compute damagePopups regardless) —
@@ -62,6 +63,7 @@ const CONE_EFFECT_LIFETIME_MS = 100;
 const LIGHTNING_EFFECT_LIFETIME_MS = 200;
 const LIGHTNING_SEGMENTS = 6;
 const LIGHTNING_JITTER = 14;
+const METEOR_EFFECT_LIFETIME_MS = 400;
 const WEAPON_ICON_WORLD_SCALE = 3.5;
 
 // On-screen max-dimension (px) for each raster sprite, independent of the
@@ -166,11 +168,15 @@ export class Renderer {
     this.drawEnemies(state.enemies, state.player.position, nowMs);
     this.drawBeamEffects(state.beamEffects, nowMs);
     this.drawLightningEffects(state.lightningEffects, nowMs);
+    this.drawMeteorEffects(state.meteorEffects, nowMs);
     this.drawProjectiles(state.projectiles);
     this.drawProjectiles(state.enemyProjectiles);
     this.drawAura(state.player, nowMs);
     this.drawPlayer(state.player, state.playerColor ?? "blue", state.playerAimAngle ?? Math.PI / 2, nowMs);
-    if (!state.player.isGhost) this.drawShurikens(state.player, nowMs);
+    if (!state.player.isGhost) {
+      this.drawShurikens(state.player, nowMs);
+      this.drawShieldRing(state.player, nowMs);
+    }
     if (state.otherPlayers) {
       for (const p of state.otherPlayers) this.drawRemotePlayer(p, nowMs);
     }
@@ -208,6 +214,7 @@ export class Renderer {
         beamEffects: snapshot.beamEffects,
         coneEffects: snapshot.coneEffects,
         lightningEffects: snapshot.lightningEffects,
+        meteorEffects: snapshot.meteorEffects,
         rewardPopups: snapshot.rewardPopups,
         damagePopups: snapshot.damagePopups,
         showDamageNumbers,
@@ -229,6 +236,7 @@ export class Renderer {
     } else {
       this.drawCharacterSprite(player, snapshot.color, rotation, nowMs);
       this.drawShurikens(player, nowMs);
+      this.drawShieldRing(player, nowMs);
     }
 
     ctx.save();
@@ -509,6 +517,57 @@ export class Renderer {
     ctx.arc(player.position.x, player.position.y, player.auraRadius * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // Shield (Barrier) perk — a thin cyan ring around the player, only drawn
+  // while shieldCurrent > 0, shrinking in opacity/thickness as it drains so
+  // it reads as "about to break" rather than a flat on/off indicator.
+  private drawShieldRing(player: Player, nowMs: number): void {
+    if (player.shieldMax <= 0 || player.shieldCurrent <= 0) return;
+    const ctx = this.ctx;
+    const ratio = player.shieldCurrent / player.shieldMax;
+    const pulse = 1 + Math.sin(nowMs / 180) * 0.04;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + ratio * 0.45;
+    ctx.strokeStyle = "#5fd8ff";
+    ctx.shadowColor = "#5fd8ff";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2 + ratio * 2;
+    ctx.beginPath();
+    ctx.arc(player.position.x, player.position.y, (player.radius + 12) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Meteor Strike perk proc — an expanding, fading shockwave ring at the
+  // impact point (see systems/statusEffects.ts's stepMeteorStrike), plus a
+  // brief bright flash at the center so the instant-hit blast still reads
+  // clearly despite having no actual falling projectile to draw.
+  private drawMeteorEffects(meteors: MeteorEffect[], nowMs: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    for (const m of meteors) {
+      const life = (m.expiresAtMs - nowMs) / METEOR_EFFECT_LIFETIME_MS;
+      const alpha = Math.max(0, Math.min(1, life));
+      if (alpha <= 0) continue;
+      const ringRadius = m.radius * (1.15 - alpha * 0.6);
+
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.fillStyle = "#ff8a3d";
+      ctx.beginPath();
+      ctx.arc(m.position.x, m.position.y, m.radius * (1 - alpha) * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "#ffb347";
+      ctx.shadowColor = "#ff5a1a";
+      ctx.shadowBlur = 16;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(m.position.x, m.position.y, ringRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
