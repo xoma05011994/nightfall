@@ -207,6 +207,37 @@ export const PERKS: Perk[] = [
     },
   },
   {
+    id: "vortex",
+    name: "Vortex",
+    description: "Deadly Aura also drags enemies caught in it toward you — requires Deadly Aura and Shurikens",
+    icon: '<path d="M12 2a10 10 0 1 0 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="19,13 19,19 13,19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    requires: ["aura", "shurikens"],
+    apply: (p) => {
+      p.auraPull += 6;
+    },
+  },
+  {
+    id: "cascade",
+    name: "Cascade",
+    description: "Chain Lightning jumps to one more enemy and hits harder — requires Storm Conduit",
+    icon: '<polygon points="13,2 4,14 11,14 9,22 20,10 13,10" fill="currentColor"/><polygon points="13,2 4,14 11,14 9,22 20,10 13,10" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4" transform="translate(3,-3) scale(0.7)"/>',
+    requires: ["stormConduit"],
+    apply: (p) => {
+      p.lightningChainCount += 1;
+      p.lightningChainDamage += 20;
+    },
+  },
+  {
+    id: "tempest",
+    name: "Tempest",
+    description: "Every Chain Lightning jump also ignites its target — requires Cascade and Wildfire",
+    icon: '<polygon points="12,2 16,10 20,14 16,22 8,22 4,14 8,10" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><polygon points="13,4 6,15 11,15 9,20 18,9 13,9" fill="currentColor"/>',
+    requires: ["cascade", "wildfire"],
+    apply: (p) => {
+      p.chainAlwaysIgnites = true;
+    },
+  },
+  {
     id: "revive",
     name: "Revive",
     description: "Bring all downed teammates back to life — multiplayer only, offered only while someone's down",

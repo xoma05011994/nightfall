@@ -95,6 +95,14 @@ export interface Player {
   // first (1 = just the initial hit's nearest target, matching the
   // original single-jump behavior) — grows with Chain Lightning's rank.
   lightningChainCount: number;
+  // Vortex (requires Deadly Aura + Shurikens) — Deadly Aura also tugs
+  // enemies caught in it toward the player by this many px each aura tick.
+  // 0 until picked.
+  auraPull: number;
+  // Tempest (deep capstone: requires Cascade + Wildfire) — every Chain
+  // Lightning jump also ignites its target, using Ignite's own numbers if
+  // picked or a modest baseline if not.
+  chainAlwaysIgnites: boolean;
   // Multiplayer only — set when hp hits 0 in co-op. A ghost can still float
   // around to spectate but is excluded from all combat (can't fire, isn't
   // targeted, takes no damage, collects nothing) until a teammate picks the

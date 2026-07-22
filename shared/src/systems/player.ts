@@ -43,6 +43,8 @@ export function createPlayer(): Player {
     shurikenDamagePerTick: 0,
     shurikenTickTimerMs: 0,
     lightningChainCount: 0,
+    auraPull: 0,
+    chainAlwaysIgnites: false,
     isGhost: false,
     facingAngle: Math.PI / 2,
   };

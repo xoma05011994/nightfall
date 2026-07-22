@@ -267,3 +267,54 @@ describe("stepShurikens", () => {
     expect(enemy.hp).toBe(100);
   });
 });
+
+describe("stepAura — Vortex (auraPull)", () => {
+  it("does not move enemies when auraPull is 0", () => {
+    const enemy = makeEnemy({ position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraPull: 0 });
+    stepAura(player, [enemy], 0.1, [], 0);
+    expect(enemy.position).toEqual({ x: 50, y: 0 });
+  });
+
+  it("pulls an enemy hit by the aura tick toward the player, capped at the remaining distance", () => {
+    const enemy = makeEnemy({ position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraPull: 10 });
+    stepAura(player, [enemy], 0.1, [], 0);
+    expect(enemy.position.x).toBeCloseTo(40, 5); // pulled 10px closer along -x
+    expect(enemy.position.y).toBeCloseTo(0, 5);
+  });
+
+  it("never pulls an enemy past the player's own position", () => {
+    const enemy = makeEnemy({ position: { x: 5, y: 0 }, hp: 100 });
+    const player = makePlayer({ position: { x: 0, y: 0 }, auraDamagePerTick: 6, auraRadius: 100, auraTickTimerMs: 0, auraPull: 50 }); // pull > distance
+    stepAura(player, [enemy], 0.1, [], 0);
+    expect(enemy.position.x).toBeCloseTo(0, 5);
+  });
+});
+
+describe("applyOnHitEffects — Tempest (chainAlwaysIgnites)", () => {
+  it("ignites every chain jump's target using Ignite's own numbers when picked", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const target = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100, chainAlwaysIgnites: true, igniteDamagePerTick: 9, igniteDurationMs: 4000 });
+    applyOnHitEffects(player, [hit, target], hit, [], 0);
+    expect(target.burnDamagePerTick).toBe(9);
+    expect(target.burnTicksRemaining).toBe(Math.ceil(4000 / IGNITE_TICK_MS));
+  });
+
+  it("falls back to a modest baseline burn when Ignite itself hasn't been picked", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const target = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100, chainAlwaysIgnites: true });
+    applyOnHitEffects(player, [hit, target], hit, [], 0);
+    expect(target.burnDamagePerTick).toBeGreaterThan(0);
+  });
+
+  it("does not ignite chain targets when chainAlwaysIgnites is off", () => {
+    const hit = makeEnemy({ id: 1, position: { x: 0, y: 0 }, hp: 100 });
+    const target = makeEnemy({ id: 2, position: { x: 50, y: 0 }, hp: 100 });
+    const player = makePlayer({ lightningChainDamage: 20, lightningChainRadius: 100 });
+    applyOnHitEffects(player, [hit, target], hit, [], 0);
+    expect(target.burnDamagePerTick).toBe(0);
+  });
+});

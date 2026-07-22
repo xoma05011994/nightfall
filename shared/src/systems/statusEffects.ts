@@ -5,6 +5,12 @@ import { circlesOverlap } from "./collision";
 import { collectDeadEnemies } from "./enemies";
 
 const LIGHTNING_EFFECT_LIFETIME_MS = 200;
+// Tempest's ignite-on-every-jump, when the player hasn't actually picked
+// Ignite (so there's no real igniteDamagePerTick/igniteDurationMs to
+// borrow) — modest on purpose, since it's a free bonus rather than the
+// thing being invested in.
+const TEMPEST_BASELINE_BURN_DAMAGE = 3;
+const TEMPEST_BASELINE_BURN_DURATION_MS = 2000;
 
 // `excludeIds` skips enemies already hit earlier in the same chain, so a
 // multi-jump Chain Lightning arc doesn't just bounce back and forth between
@@ -60,6 +66,14 @@ export function applyOnHitEffects(player: Player, enemies: Enemy[], hitEnemy: En
       target.hp -= damage;
       applyLifeSteal(player, damage);
       lightningEffects.push({ from: { ...source.position }, to: { ...target.position }, expiresAtMs: nowMs + LIGHTNING_EFFECT_LIFETIME_MS, seed: source.id + target.id });
+      // Tempest — every jump ignites its target too, using Ignite's own
+      // numbers if picked (also making the *next* jump's double-damage
+      // synergy trigger off this target), or a modest baseline if not.
+      if (player.chainAlwaysIgnites) {
+        target.burnDamagePerTick = player.igniteDamagePerTick > 0 ? player.igniteDamagePerTick : TEMPEST_BASELINE_BURN_DAMAGE;
+        target.burnTicksRemaining = Math.ceil((player.igniteDamagePerTick > 0 ? player.igniteDurationMs : TEMPEST_BASELINE_BURN_DURATION_MS) / IGNITE_TICK_MS);
+        target.burnTickTimerMs = IGNITE_TICK_MS;
+      }
       visited.add(target.id);
       source = target;
     }
@@ -110,6 +124,18 @@ export function stepAura(player: Player, enemies: Enemy[], dt: number, lightning
         enemy.burnDamagePerTick = player.igniteDamagePerTick;
         enemy.burnTicksRemaining = Math.ceil(player.igniteDurationMs / IGNITE_TICK_MS);
         enemy.burnTickTimerMs = IGNITE_TICK_MS;
+      }
+      // Vortex — drags anything the aura hits a little closer each tick,
+      // capped so it can't overshoot past the player.
+      if (player.auraPull > 0) {
+        const dx = player.position.x - enemy.position.x;
+        const dy = player.position.y - enemy.position.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1e-6) {
+          const pull = Math.min(player.auraPull, dist);
+          enemy.position.x += (dx / dist) * pull;
+          enemy.position.y += (dy / dist) * pull;
+        }
       }
       hitAny = true;
     }

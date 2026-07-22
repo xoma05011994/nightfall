@@ -4,9 +4,9 @@ import { PERKS, getPerkById, perkTier, rollPerkOffers } from "../src/systems/per
 import { makePlayer } from "./testHelpers";
 
 describe("PERKS", () => {
-  it("has exactly 19 perks with unique ids", () => {
-    expect(PERKS).toHaveLength(19);
-    expect(new Set(PERKS.map((p) => p.id)).size).toBe(19);
+  it("has exactly 22 perks with unique ids", () => {
+    expect(PERKS).toHaveLength(22);
+    expect(new Set(PERKS.map((p) => p.id)).size).toBe(22);
   });
 
   it("every perk has a non-empty icon", () => {
@@ -171,6 +171,28 @@ describe("PERKS", () => {
     expect(player.shurikenDamagePerTick).toBe(10);
   });
 
+  it("vortex perk adds aura pull and requires Deadly Aura + Shurikens", () => {
+    const player = makePlayer();
+    getPerkById("vortex")!.apply(player, 1);
+    expect(player.auraPull).toBe(6);
+    expect(getPerkById("vortex")!.requires).toEqual(["aura", "shurikens"]);
+  });
+
+  it("cascade perk adds a chain jump and damage, requires Storm Conduit", () => {
+    const player = makePlayer({ lightningChainCount: 3, lightningChainDamage: 50 });
+    getPerkById("cascade")!.apply(player, 1);
+    expect(player.lightningChainCount).toBe(4);
+    expect(player.lightningChainDamage).toBe(70);
+    expect(getPerkById("cascade")!.requires).toEqual(["stormConduit"]);
+  });
+
+  it("tempest perk sets chainAlwaysIgnites and requires Cascade + Wildfire", () => {
+    const player = makePlayer();
+    getPerkById("tempest")!.apply(player, 1);
+    expect(player.chainAlwaysIgnites).toBe(true);
+    expect(getPerkById("tempest")!.requires).toEqual(["cascade", "wildfire"]);
+  });
+
   it("revive perk is gated on a 2+ party AND a downed teammate, and buffs the picker's stats not at all", () => {
     const revive = getPerkById("revive")!;
     expect(revive.minPartySize).toBe(2);
@@ -276,5 +298,17 @@ describe("perkTier", () => {
   it("is 1 for wildfire/overload (requires tier-0 aura plus a tier-0 elemental)", () => {
     expect(perkTier("wildfire")).toBe(1);
     expect(perkTier("overload")).toBe(1);
+  });
+
+  it("is 1 for vortex (requires tier-0 aura plus tier-0 shurikens)", () => {
+    expect(perkTier("vortex")).toBe(1);
+  });
+
+  it("is 2 for cascade (requires tier-1 stormConduit)", () => {
+    expect(perkTier("cascade")).toBe(2);
+  });
+
+  it("is 3 for tempest (requires tier-2 cascade plus tier-1 wildfire) — the tree's deepest capstone", () => {
+    expect(perkTier("tempest")).toBe(3);
   });
 });
